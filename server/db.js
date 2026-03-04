@@ -56,9 +56,18 @@ function init() {
       ["anode_hp_mag","HP Mag Anode","anode"]
     ];
 
-    const stmt = db.prepare(`INSERT OR IGNORE INTO items(id,label,category) VALUES(?,?,?)`);
+    const stmt = db.prepare(`INSERT INTO items(id,label,category) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET label = excluded.label, category = excluded.category`);
     items.forEach(it => stmt.run(it[0], it[1], it[2]));
     stmt.finalize();
+
+    // Remove stale items that are not in the current seeded list
+    const ids = items.map(it => it[0]);
+    if (ids.length > 0) {
+      const placeholders = ids.map(() => '?').join(',');
+      db.run(`DELETE FROM items WHERE id NOT IN (${placeholders})`, ids, function(err){
+        if (err) console.error('Failed to remove stale items:', err);
+      });
+    }
   });
 }
 
