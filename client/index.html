@@ -32,7 +32,7 @@
     .controls button:active{transform:translateY(1px)}
     #items{margin-top:12px}
     #queued{background:#fff8e1;border:1px solid #ffe082;padding:.5rem;margin-top:1rem;border-radius:6px}
-    #syncBtn{background:#1976d2;color:#fff;padding:8px 12px;border-radius:8px;border:0;font-weight:600;margin-right:8px}
+    #syncBtn{background:#2e7d32;color:#fff;padding:8px 12px;border-radius:8px;border:0;font-weight:600;margin-right:8px}
     #syncBtn.loading{position:relative}
     #syncBtn.loading::after{content:"";width:16px;height:16px;border:2px solid rgba(255,255,255,0.6);border-top-color:transparent;border-radius:50%;position:absolute;right:10px;top:50%;transform:translateY(-50%);animation:spin 1s linear infinite}
 
@@ -41,11 +41,10 @@
     @media (prefers-color-scheme:dark){body:not([data-theme]){--bg:#050505;--fg:#eee;--high-contrast-bg:#fff;--high-contrast-fg:#000} body:not([data-theme]) .item{background:#0b0b0b;border-color:#222} body:not([data-theme]) .meta{color:#ccc} body:not([data-theme]) .controls button.btnPlus{background:#66bb6a} body:not([data-theme]) .controls button.btnMinus{background:#ef5350} body:not([data-theme]) .meta .delta{color:rgba(255,255,255,0.5)}}
 
     /* Header buttons uniform styling */
-    #startSessionBtn, #syncBtn, #themeToggle, #endSessionBtn, #barsLink, #historyLink {
+    #syncBtn, #themeToggle, #endSessionBtn, #barsLink, #historyLink {
       display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 12px; border-radius:8px; text-decoration:none; font-weight:600; margin-left:8px; cursor:pointer; vertical-align:middle;
     }
-    #startSessionBtn{ background:#2e7d32; color:#fff; border:0 }
-    #syncBtn{ background:#c62828; color:#fff; border:0 }
+    #syncBtn{ background:#2e7d32; color:#fff; border:0 }
     #themeToggle{ background:#fff; color:#111; border:1px solid #ddd }
     #barsLink, #historyLink{ background:#eee; color:#111; border:0 }
     body[data-theme="dark"] #themeToggle{ background:#222; color:#fff; border:1px solid #444 }
@@ -63,10 +62,9 @@
   </script>
   <h1>InvApp</h1>
   <div>
-    <button id="startSessionBtn">Start Count</button>
+    <button id="syncBtn">Sync Now</button>
     <a id="barsLink" href="/bars.html">Stock</a>
     <a id="historyLink" href="/history.html">History</a>
-    <button id="syncBtn">End Count</button>
     <button id="themeToggle">Dark</button>
     <button id="endSessionBtn" style="display:none">End Session</button>
     <span id="sessionInfo" style="margin-left:8px;color:#666"></span>

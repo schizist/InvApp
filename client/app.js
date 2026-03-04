@@ -52,8 +52,16 @@
     const startBtn = document.getElementById('startSessionBtn');
     const endBtn = document.getElementById('endSessionBtn');
     const info = document.getElementById('sessionInfo');
-    if (currentSession){ startBtn.style.display='none'; endBtn.style.display='inline-block'; info.textContent = `Session: ${currentSession.slice(0,8)}`; }
-    else { startBtn.style.display='inline-block'; endBtn.style.display='none'; info.textContent = ''; }
+    if (currentSession){
+      if (startBtn) startBtn.style.display='none';
+      if (endBtn) endBtn.style.display='inline-block';
+      if (info) info.textContent = `Session: ${currentSession.slice(0,8)}`;
+    }
+    else {
+      if (startBtn) startBtn.style.display='inline-block';
+      if (endBtn) endBtn.style.display='none';
+      if (info) info.textContent = '';
+    }
   }
 
   async function fetchSummary(){
@@ -217,7 +225,7 @@
       }catch(e){
         console.error('Upload failed after retries', e);
         setStatus('sync failed (upload)');
-        try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'End Count'; } catch(e){}
+        try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
         return;
       }
 
@@ -232,10 +240,10 @@
 
       setStatus('up to date');
       await refreshAll();
-      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'End Count'; } catch(e){}
+      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
     }catch(e){
       console.error(e); setStatus('sync failed');
-      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'End Count'; } catch(e){}
+      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
     }
   }
 
@@ -260,9 +268,8 @@
     }
   }
 
-  // repurpose sync button as 'End Count' which ends the session and triggers sync
+  // manual sync button
   syncBtn.addEventListener('click', async ()=>{
-    try{ await endSession(); }catch(e){ console.warn('endSession failed', e); }
     await syncOnce();
   });
 
