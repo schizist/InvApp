@@ -6,5 +6,5 @@ Generate reorder report when item reaches reorder threshold. Includes vendor inf
 
 Email reorder report to me
 
-Include item information in history page, rename history page 'Details'.
+Include item information in details page
 

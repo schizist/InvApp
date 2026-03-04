@@ -3,20 +3,49 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>InvApp - History</title>
+  <title>InvApp - Details</title>
   <style>
-    :root{--bg:#ffffff;--fg:#111}
-    body{font-family:system-ui,Arial;padding:12px;background:var(--bg);color:var(--fg)}
-    .controls{display:flex;gap:8px;align-items:center}
-    #chartWrap{width:100%;height:260px;border:1px solid #ddd;position:relative}
+    :root{
+      --bg:#f4f6f8;
+      --fg:#0f172a;
+      --panel:#ffffff;
+      --border:#d8dee4;
+      --muted:#64748b;
+      --accent:#0f766e;
+      --accent-2:#0b5ed7;
+    }
+    body{font-family:system-ui,Arial;padding:16px;background:var(--bg);color:var(--fg);margin:0}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+    h1{margin:0;font-size:1.5rem}
+    .subtitle{margin:2px 0 0 0;color:var(--muted);font-size:0.95rem}
+    .topActions{display:flex;gap:8px;align-items:center}
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+    .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .field label{font-size:0.85rem;font-weight:700;color:#334155}
+    .field select,.field input{
+      height:38px;border:1px solid #cbd5e1;border-radius:8px;padding:0 10px;background:#fff;color:#111
+    }
+    .field input[type="date"]{padding-right:6px}
+    .actions{display:flex;gap:8px;align-items:end}
+    .btn{
+      height:38px;padding:0 12px;border-radius:8px;border:1px solid transparent;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center
+    }
+    #saveReorder{background:var(--accent-2);color:#fff}
+    #themeToggle{background:#fff;color:#111;border-color:#cbd5e1}
+    .backBtn{background:#fff;color:#111;border-color:#cbd5e1}
+    #chartWrap{width:100%;height:300px;border:1px solid var(--border);position:relative;border-radius:12px;margin-top:12px;background:var(--panel)}
     canvas{width:100%;height:100%;display:block}
     #tooltip{position:absolute;background:#111;color:#fff;padding:6px;border-radius:6px;font-size:0.85rem;pointer-events:none;display:none}
-    .events{margin-top:12px}
-    body[data-theme="dark"]{ --bg:#050505; --fg:#eee }
-    body[data-theme="dark"] #chartWrap{border-color:#333}
+    .events{margin-top:12px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;max-height:320px;overflow:auto}
+    .eventsTitle{font-size:0.95rem;font-weight:700;margin:4px 0 8px 0;color:#334155}
+    body[data-theme="dark"]{ --bg:#050505; --fg:#eee; --panel:#0f1115; --border:#2b2f36; --muted:#9aa4b2; --accent:#14b8a6; --accent-2:#2563eb }
+    body[data-theme="dark"] .field label{color:#cbd5e1}
+    body[data-theme="dark"] .field select,
+    body[data-theme="dark"] .field input{background:#0b0d10;color:#e5e7eb;border-color:#3a3f46}
+    body[data-theme="dark"] .backBtn,
+    body[data-theme="dark"] #themeToggle{background:#1b1f25;color:#e5e7eb;border-color:#3a3f46}
     body[data-theme="dark"] #tooltip{background:#fff;color:#000}
-    #themeToggle{padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff;color:#111}
-    body[data-theme="dark"] #themeToggle{background:#222;color:#fff;border-color:#444}
   </style>
   <script src="/idb.js"></script>
   <script src="/history.js"></script>
@@ -30,17 +59,43 @@
       }catch(e){}
     })();
   </script>
-  <h1>History</h1>
-  <div class="controls">
-    <select id="item"></select>
-    <input id="reorderInput" placeholder="Reorder level" style="width:110px;padding:6px;border-radius:6px;border:1px solid #ccc" />
-    <button id="saveReorder" style="padding:6px 10px;border-radius:6px;background:#1976d2;color:#fff;border:0">Save</button>
-    <input type="date" id="from" />
-    <input type="date" id="to" />
-    <a href="/">Back</a>
-    <button id="themeToggle">Dark</button>
+  <div class="topbar">
+    <div>
+      <h1>Details</h1>
+      <p class="subtitle">Item timeline and count details</p>
+    </div>
+    <div class="topActions">
+      <a href="/" class="btn backBtn">Back</a>
+      <button id="themeToggle" class="btn">Dark</button>
+    </div>
   </div>
+
+  <div class="panel controls">
+    <div class="field">
+      <label for="item">Item</label>
+      <select id="item"></select>
+    </div>
+    <div class="field">
+      <label for="reorderInput">Reorder Level</label>
+      <input id="reorderInput" type="number" placeholder="Enter level" />
+    </div>
+    <div class="actions">
+      <button id="saveReorder" class="btn">Save Reorder</button>
+    </div>
+    <div class="field">
+      <label for="from">From Date</label>
+      <input type="date" id="from" />
+    </div>
+    <div class="field">
+      <label for="to">To Date</label>
+      <input type="date" id="to" />
+    </div>
+  </div>
+
   <div id="chartWrap"><canvas id="chartCanvas"></canvas><div id="tooltip"></div></div>
-  <div id="events" class="events"></div>
+  <div class="events">
+    <div class="eventsTitle">Events</div>
+    <div id="events"></div>
+  </div>
 </body>
 </html>
