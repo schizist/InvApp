@@ -129,6 +129,9 @@
   async function syncOnce(){
     try{
       setStatus('syncing');
+      // disable and show spinner
+      try { syncBtn.disabled = true; syncBtn.classList.add('loading'); syncBtn.textContent = 'Syncing'; } catch(e){}
+
       const q = await IDB.getQueued();
       if (q.length>0){
         const res = await fetch('/api/events', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(q) });
@@ -143,8 +146,10 @@
       await IDB.storeRemoteEvents(remote);
       setStatus('up to date');
       await refreshAll();
+      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
     }catch(e){
       console.error(e); setStatus('sync failed');
+      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
     }
   }
 

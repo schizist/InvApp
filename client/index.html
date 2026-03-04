@@ -21,10 +21,16 @@
     .controls button{width:64px;height:64px;border-radius:10px;border:0;color:#fff;font-size:1.25rem;box-shadow:0 2px 0 rgba(0,0,0,0.2);touch-action:manipulation}
     .controls button.btnPlus{background:#2e7d32}
     .controls button.btnMinus{background:#c62828}
-    .controls button.btnSet{background:#00695c;width:72px;height:44px;border-radius:8px;font-size:1rem}
+    .controls button.btnSet{background:#1976d2;width:72px;height:44px;border-radius:8px;font-size:1rem}
     .controls button:active{transform:translateY(1px)}
     #items{margin-top:12px}
     #queued{background:#fff8e1;border:1px solid #ffe082;padding:.5rem;margin-top:1rem;border-radius:6px}
+    #syncBtn{background:#1976d2;color:#fff;padding:8px 12px;border-radius:8px;border:0;font-weight:600;margin-right:8px}
+    #syncBtn.loading{position:relative}
+    #syncBtn.loading::after{content:"";width:16px;height:16px;border:2px solid rgba(255,255,255,0.6);border-top-color:transparent;border-radius:50%;position:absolute;right:10px;top:50%;transform:translateY(-50%);animation:spin 1s linear infinite}
+
+    @keyframes spin{to{transform:translateY(-50%) rotate(360deg)}}
+
     @media (prefers-color-scheme:dark){:root{--bg:#050505;--fg:#eee;--high-contrast-bg:#fff;--high-contrast-fg:#000} .item{background:#0b0b0b;border-color:#222} .meta{color:#ccc} .controls button.btnPlus{background:#66bb6a} .controls button.btnMinus{background:#ef5350} .meta .delta{color:rgba(255,255,255,0.5)}}
   </style>
 </head>
