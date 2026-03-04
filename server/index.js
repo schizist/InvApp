@@ -126,6 +126,38 @@ app.get('/api/items/:id/history', (req, res) => {
   });
 });
 
+// GET single item
+app.get('/api/items/:id', (req, res) => {
+  const id = req.params.id;
+  db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize FROM items WHERE id = ?`, [id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'not found' });
+    res.json(row);
+  });
+});
+
+// Update item fields (partial)
+app.put('/api/items/:id', (req, res) => {
+  const id = req.params.id;
+  const { reorderLevel, reorderQty, label } = req.body || {};
+  // build dynamic set
+  const sets = [];
+  const params = [];
+  if (typeof reorderLevel !== 'undefined') { sets.push('reorderLevel = ?'); params.push(reorderLevel); }
+  if (typeof reorderQty !== 'undefined') { sets.push('reorderQty = ?'); params.push(reorderQty); }
+  if (typeof label !== 'undefined') { sets.push('label = ?'); params.push(label); }
+  if (sets.length === 0) return res.status(400).json({ error: 'no fields' });
+  params.push(id);
+  const sql = `UPDATE items SET ${sets.join(', ')} WHERE id = ?`;
+  db.run(sql, params, function(err){
+    if (err) return res.status(500).json({ error: err.message });
+    db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize FROM items WHERE id = ?`, [id], (err2, row) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      res.json(row);
+    });
+  });
+});
+
 // GET summary - compute current quantity per item
 app.get('/api/summary', (req, res) => {
   db.all(`SELECT id FROM items`, (err, items) => {

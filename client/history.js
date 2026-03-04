@@ -5,7 +5,7 @@
   async function loadItems(){
     const items = await fetch('/api/items').then(r=>r.json()).catch(()=>[]);
     const sel = el('item'); sel.innerHTML='';
-    items.forEach(it=>{ const o=document.createElement('option'); o.value=it.id; o.textContent=it.label; sel.appendChild(o); });
+    items.forEach(it=>{ const o=document.createElement('option'); o.value=it.id; o.textContent=it.label; if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) o.dataset.reorder = String(it.reorderLevel); sel.appendChild(o); });
   }
 
   function formatDate(d){ return d.toISOString().slice(0,10); }
@@ -74,36 +74,41 @@
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0,0,canvas.width,canvas.height);
     if (!series || series.length===0) return;
-    // convert dates to x positions
+    // draw bar chart per day, with reorder line if provided
     const pad = 40 * DPR;
     const w = canvas.width; const h = canvas.height;
     const areaW = w - pad*2; const areaH = h - pad*2;
-    const dates = series.map(s=>new Date(s.date));
     const vals = series.map(s=>s.qty);
-    const minV = Math.min(...vals); const maxV = Math.max(...vals);
+    const minV = Math.min(...vals, 0); const maxV = Math.max(...vals, 1);
     const vRange = (maxV - minV) || 1;
-    const points = series.map((s,i)=>{
-      const t = dates[i].getTime();
-      const minT = dates[0].getTime(); const maxT = dates[dates.length-1].getTime()||minT+1;
-      const x = pad + ((t - minT) / (maxT - minT || 1)) * areaW;
-      const y = pad + (1 - (s.qty - minV)/vRange) * areaH;
-      return {x,y,date:series[i].date,qty:series[i].qty};
-    });
+    const barW = areaW / series.length * 0.8;
     // grid lines
     ctx.strokeStyle = '#e6e6e6'; ctx.lineWidth = 1 * DPR;
     ctx.beginPath();
     for (let i=0;i<=4;i++){ const yy = pad + (i/4)*areaH; ctx.moveTo(pad, yy); ctx.lineTo(pad+areaW, yy); }
     ctx.stroke();
-    // draw line
-    ctx.beginPath(); ctx.strokeStyle='#1976d2'; ctx.lineWidth = 2 * DPR; ctx.lineJoin='round';
-    points.forEach((p,i)=>{ if (i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); }); ctx.stroke();
-    // draw points
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1976d2'; ctx.lineWidth = 2*DPR;
-    points.forEach(p=>{ ctx.beginPath(); ctx.arc(p.x,p.y,4*DPR,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
-    // x labels (first, middle, last)
+    // draw bars
+    series.forEach((s,i)=>{
+      const x = pad + i * (areaW / series.length) + (areaW/series.length - barW)/2;
+      const y = pad + (1 - (s.qty - minV)/vRange) * areaH;
+      const bh = pad + areaH - y;
+      ctx.fillStyle = '#1976d2';
+      ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(barW), Math.floor(bh));
+    });
+    // draw x labels
     ctx.fillStyle='#333'; ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign='center';
-    const labels = [points[0], points[Math.floor(points.length/2)], points[points.length-1]];
-    labels.forEach(p=>{ ctx.fillText(p.date, p.x, h - pad/2); });
+    series.forEach((s,i)=>{ const x = pad + i * (areaW / series.length) + (areaW/series.length)/2; ctx.fillText(s.date, x, h - pad/2); });
+    // if current item has reorderLevel stored in dataset, draw horizontal reorder line
+    try{
+      const sel = document.getElementById('item'); const opt = sel && sel.options[sel.selectedIndex];
+      const rl = opt && opt.dataset && opt.dataset.reorder ? parseFloat(opt.dataset.reorder) : null;
+      if (rl !== null && !Number.isNaN(rl)){
+        const y = pad + (1 - (rl - minV)/vRange) * areaH;
+        ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2*DPR; ctx.setLineDash([6*DPR,4*DPR]);
+        ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad+areaW, y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#c62828'; ctx.font = `${11*DPR}px sans-serif`; ctx.textAlign='right'; ctx.fillText('Reorder: '+rl, pad+areaW-6*DPR, y - 6*DPR);
+      }
+    }catch(e){ /* ignore */ }
   }
 
   function posToNearest(evt){
@@ -147,5 +152,19 @@
   window.addEventListener('DOMContentLoaded', ()=>{ canvas = el('chartCanvas'); tooltip = el('tooltip'); attachCanvasEvents(); window.load(); resizeCanvas();
     // apply persisted theme (no toggle on this page)
     const saved = localStorage.getItem('invapp.theme'); if (saved==='dark') document.body.setAttribute('data-theme','dark');
+    // wire save reorder
+    const saveBtn = el('saveReorder'); if (saveBtn){ saveBtn.addEventListener('click', async ()=>{
+      const sel = el('item'); const id = sel.value; const val = el('reorderInput').value; if (!id) return alert('Select an item'); const n = parseInt(val,10); if (Number.isNaN(n)) return alert('Invalid number');
+      try{
+        const res = await fetch('/api/items/'+encodeURIComponent(id), { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ reorderLevel: n }) });
+        if (!res.ok) throw new Error('update failed '+res.status);
+        // update option dataset and redraw
+        sel.options[sel.selectedIndex].dataset.reorder = String(n);
+        alert('Reorder level saved');
+        await show();
+      }catch(e){ console.error(e); alert('Failed to save reorder: '+(e.message||e)); }
+    }); }
+    // populate reorder input when selection changes
+    const sel = el('item'); sel && sel.addEventListener('change', ()=>{ const opt = sel.options[sel.selectedIndex]; el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : ''; });
   });
 })();
