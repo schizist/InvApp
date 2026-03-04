@@ -35,6 +35,52 @@
     return res.json();
   }
 
+  // sync helpers (retry/backoff)
+  function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+  async function uploadQueuedWithRetry(maxAttempts = 5){
+    let attempt = 0;
+    let delay = 1000;
+    while (attempt < maxAttempts){
+      attempt++;
+      try{
+        const q = await IDB.getQueued();
+        if (!q || q.length === 0) return { inserted:0, ignored:0 };
+        const res = await fetch('/api/events', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(q), timeout: 10000 });
+        if (!res.ok) throw new Error('upload failed: '+res.status);
+        const json = await res.json();
+        // clear uploaded events locally
+        const ids = q.map(e=>e.id);
+        await IDB.clearEvents(ids);
+        return json;
+      }catch(e){
+        console.warn('upload attempt', attempt, 'failed', e.message || e);
+        if (attempt >= maxAttempts) throw e;
+        await wait(delay);
+        delay = Math.min(30000, delay * 2);
+      }
+    }
+  }
+
+  async function fetchUpdatesSince(last){
+    const since = last || new Date(0).toISOString();
+    const res = await fetch('/api/events?since='+encodeURIComponent(since));
+    if (!res.ok) throw new Error('fetch updates failed');
+    const events = await res.json();
+    if (events && events.length>0){
+      await IDB.storeRemoteEvents(events);
+      // compute newest timestamp
+      const maxTs = events.reduce((m,e)=> e.timestamp > m ? e.timestamp : m, last || events[0].timestamp);
+      await IDB.setLastSynced(maxTs);
+      return { eventsCount: events.length, last: maxTs };
+    } else {
+      // still update lastSynced to now to mark we've checked
+      const now = new Date().toISOString();
+      await IDB.setLastSynced(now);
+      return { eventsCount: 0, last: now };
+    }
+  }
+
   function renderItems(items, summaryMap, queuedMap){
     itemsEl.innerHTML = '';
     items.forEach(it => {
@@ -129,21 +175,27 @@
   async function syncOnce(){
     try{
       setStatus('syncing');
-      // disable and show spinner
       try { syncBtn.disabled = true; syncBtn.classList.add('loading'); syncBtn.textContent = 'Syncing'; } catch(e){}
 
-      const q = await IDB.getQueued();
-      if (q.length>0){
-        const res = await fetch('/api/events', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(q) });
-        const json = await res.json();
-        // remove inserted ones (we assume successful insertion)
-        const ids = q.map(e=>e.id);
-        await IDB.clearEvents(ids);
+      // 1) upload queued with retry
+      try{
+        await uploadQueuedWithRetry(5);
+      }catch(e){
+        console.error('Upload failed after retries', e);
+        setStatus('sync failed (upload)');
+        try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
+        return;
       }
-      // fetch remote events to store locally if needed
-      const since = new Date(0).toISOString();
-      const remote = await fetch('/api/events?since='+encodeURIComponent(since)).then(r=>r.json());
-      await IDB.storeRemoteEvents(remote);
+
+      // 2) fetch updates since lastSynced
+      const last = await IDB.getLastSynced() || new Date(0).toISOString();
+      try{
+        await fetchUpdatesSince(last);
+      }catch(e){
+        console.warn('fetch updates failed', e);
+        // still continue to refresh UI from local state
+      }
+
       setStatus('up to date');
       await refreshAll();
       try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
@@ -178,6 +230,9 @@
 
   window.addEventListener('online', ()=>{ setStatus('online'); syncOnce(); });
   window.addEventListener('offline', ()=>{ setStatus('offline'); });
+
+  // periodic background sync (attempt every 30s when online)
+  setInterval(() => { if (navigator.onLine) syncOnce(); }, 30000);
 
   // initial
   setStatus(navigator.onLine ? 'online' : 'offline');

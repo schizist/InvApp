@@ -1,7 +1,7 @@
 // Minimal IndexedDB helper
 (function(global){
   const DB_NAME = 'invapp';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   let dbp = null;
 
   function open() {
@@ -17,6 +17,9 @@
         }
         if (!db.objectStoreNames.contains('remoteEvents')) {
           db.createObjectStore('remoteEvents', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('meta')) {
+          db.createObjectStore('meta', { keyPath: 'key' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -67,6 +70,29 @@
     });
   }
 
+  async function setMeta(key, value) {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('meta','readwrite');
+      tx.objectStore('meta').put({ key, value });
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  async function getMeta(key) {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('meta','readonly');
+      const req = tx.objectStore('meta').get(key);
+      req.onsuccess = () => res(req.result ? req.result.value : null);
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  async function setLastSynced(ts){ return setMeta('lastSynced', ts); }
+  async function getLastSynced(){ return getMeta('lastSynced'); }
+
   async function getAllRemote() {
     const db = await open();
     return new Promise((res, rej) => {
@@ -77,5 +103,5 @@
     });
   }
 
-  global.IDB = { addEvent, getQueued, clearEvents, storeRemoteEvents, getAllRemote };
+  global.IDB = { addEvent, getQueued, clearEvents, storeRemoteEvents, getAllRemote, setLastSynced, getLastSynced };
 })(window);
