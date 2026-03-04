@@ -236,7 +236,7 @@
       }catch(e){
         console.error('Upload failed after retries', e);
         setStatus('sync failed (upload)');
-        try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
+        try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'End Count'; } catch(e){}
         return;
       }
 
@@ -251,10 +251,10 @@
 
       setStatus('up to date');
       await refreshAll();
-      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
+      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'End Count'; } catch(e){}
     }catch(e){
       console.error(e); setStatus('sync failed');
-      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
+      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'End Count'; } catch(e){}
     }
   }
 
@@ -279,7 +279,11 @@
     }
   }
 
-  syncBtn.addEventListener('click', syncOnce);
+  // repurpose sync button as 'End Count' which ends the session and triggers sync
+  syncBtn.addEventListener('click', async ()=>{
+    try{ await endSession(); }catch(e){ console.warn('endSession failed', e); }
+    await syncOnce();
+  });
 
   window.addEventListener('online', ()=>{ setStatus('online'); syncOnce(); });
   window.addEventListener('offline', ()=>{ setStatus('offline'); });

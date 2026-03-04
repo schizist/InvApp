@@ -39,6 +39,16 @@
     @keyframes spin{to{transform:translateY(-50%) rotate(360deg)}}
 
     @media (prefers-color-scheme:dark){:root{--bg:#050505;--fg:#eee;--high-contrast-bg:#fff;--high-contrast-fg:#000} .item{background:#0b0b0b;border-color:#222} .meta{color:#ccc} .controls button.btnPlus{background:#66bb6a} .controls button.btnMinus{background:#ef5350} .meta .delta{color:rgba(255,255,255,0.5)}}
+
+    /* Header buttons uniform styling */
+    #startSessionBtn, #syncBtn, #themeToggle, #endSessionBtn, #barsLink, #historyLink {
+      display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 12px; border-radius:8px; text-decoration:none; font-weight:600; margin-left:8px; cursor:pointer; vertical-align:middle;
+    }
+    #startSessionBtn{ background:#2e7d32; color:#fff; border:0 }
+    #syncBtn{ background:#c62828; color:#fff; border:0 }
+    #themeToggle{ background:#fff; color:#111; border:1px solid #ddd }
+    #barsLink, #historyLink{ background:#eee; color:#111; border:0 }
+    body[data-theme="dark"] #themeToggle{ background:#222; color:#fff; border:1px solid #444 }
   </style>
 </head>
 <body>
@@ -53,11 +63,11 @@
   </script>
   <h1>InvApp</h1>
   <div>
-    <button id="syncBtn">Sync Now</button>
-    <a id="historyLink" href="/history.html" style="margin-left:8px;padding:8px 12px;border-radius:8px;background:#eee;color:#111;text-decoration:none;font-weight:600">History</a>
-    <a id="barsLink" href="/bars.html" style="margin-left:8px;padding:8px 12px;border-radius:8px;background:#eee;color:#111;text-decoration:none;font-weight:600">Bars</a>
-    <button id="themeToggle" style="margin-left:8px;padding:8px 12px;border-radius:8px;background:#fff;border:1px solid #ddd">Dark</button>
-    <button id="startSessionBtn">Start Count Session</button>
+    <button id="startSessionBtn">Start Count</button>
+    <a id="barsLink" href="/bars.html">Stock</a>
+    <a id="historyLink" href="/history.html">History</a>
+    <button id="syncBtn">End Count</button>
+    <button id="themeToggle">Dark</button>
     <button id="endSessionBtn" style="display:none">End Session</button>
     <span id="sessionInfo" style="margin-left:8px;color:#666"></span>
     <span id="status">Status: unknown</span>

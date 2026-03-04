@@ -18,19 +18,21 @@
   function drawBars(data){
     const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height);
     if (!data || data.length===0) return;
-    const pad = 40*DPR; const w = canvas.width; const h = canvas.height; const areaW = w - pad*2; const areaH = h - pad*2;
+    const padTop = 20*DPR; const padBottom = 60*DPR; const w = canvas.width; const h = canvas.height; const areaW = w - padTop*2; const areaH = h - padTop - padBottom; const areaX = padTop; const areaY = padTop;
     const maxV = Math.max(...data.map(d=>d.qty), 1);
     const barW = Math.max(12*DPR, Math.floor(areaW / data.length * 0.7));
     data.forEach((d,i)=>{
-      const x = pad + i*(areaW/data.length) + (areaW/data.length - barW)/2;
+      const x = areaX + i*(areaW/data.length) + (areaW/data.length - barW)/2;
       const barH = Math.floor((d.qty / maxV) * areaH);
-      const y = pad + (areaH - barH);
+      const y = areaY + (areaH - barH);
       ctx.fillStyle = '#1976d2'; ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(barW), Math.floor(barH));
-      // label
-      ctx.fillStyle = '#222'; ctx.font = `${11*DPR}px sans-serif`; ctx.textAlign='center'; ctx.fillText(d.label, x + barW/2, h - pad/2);
+      // label (rotated 90deg CCW)
+      ctx.fillStyle = '#222'; ctx.font = `${11*DPR}px sans-serif`;
+      const labelX = x + barW/2; const labelY = h - padBottom/2;
+      ctx.save(); ctx.translate(labelX, labelY); ctx.rotate(-Math.PI/2); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(d.label, 0, 0); ctx.restore();
       // reorder marker (small red horizontal line across bar area)
       if (d.reorder !== null && !Number.isNaN(d.reorder)){
-        const ry = pad + (1 - (d.reorder / maxV)) * areaH;
+        const ry = areaY + (1 - (d.reorder / maxV)) * areaH;
         ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2*DPR; ctx.beginPath(); ctx.moveTo(x, ry); ctx.lineTo(x+barW, ry); ctx.stroke();
       }
     });
