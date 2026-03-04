@@ -12,6 +12,19 @@
   function setStatus(s){ statusEl.textContent = 'Status: '+s; }
   function uuidv4(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{const r=Math.random()*16|0;const v=c=='x'?r:(r&0x3|0x8);return v.toString(16);}); }
 
+  function getUnitInfo(category){
+    // returns {multiplier, label}
+    switch((category||'').toLowerCase()){
+      case 'wire': return {multiplier:100, label:"100ft"};
+      case 'cap': return {multiplier:100, label:"100pcs"};
+      case 'shot': return {multiplier:20, label:"20pcs"};
+      case 'mold': return {multiplier:1, label:"pcs"};
+      case 'enclosure': return {multiplier:1, label:"pcs"};
+      case 'anode': return {multiplier:1, label:"pcs"};
+      default: return {multiplier:1, label:"pcs"};
+    }
+  }
+
   async function fetchItems(){
     const res = await fetch('/api/items');
     return res.json();
@@ -29,20 +42,52 @@
       const node = tpl.content.cloneNode(true);
       node.querySelector('.label').textContent = it.label;
       const sm = summaryMap[it.id] || {qty:0,lastUpdate:null};
-      node.querySelector('.meta').textContent = 'Qty: '+ (sm.qty||0) + (sm.lastUpdate?(' • '+new Date(sm.lastUpdate).toLocaleString()):'');
-      const btnDelta = node.querySelector('.btnDelta');
+      const unit = getUnitInfo(it.category);
+      const baseQty = sm.qty || 0;
+      const displayQty = (unit.multiplier>1) ? (baseQty / unit.multiplier) : baseQty;
+      const metaEl = node.querySelector('.meta');
+      metaEl.innerHTML = '';
+      const qtySpan = document.createElement('span'); qtySpan.className = 'qty'; qtySpan.textContent = baseQty;
+      const dispSpan = document.createElement('span'); dispSpan.className = 'display'; dispSpan.textContent = `(${displayQty} × ${unit.label})`;
+      metaEl.appendChild(qtySpan);
+      metaEl.appendChild(dispSpan);
+      if (sm.lastUpdate) {
+        const last = document.createElement('span'); last.className = 'last'; last.style.marginLeft = '8px'; last.style.fontSize = '0.85rem'; last.style.color = '#666'; last.textContent = '• '+new Date(sm.lastUpdate).toLocaleString();
+        metaEl.appendChild(last);
+      }
+      const btnPlus = node.querySelector('.btnPlus');
+      const btnMinus = node.querySelector('.btnMinus');
       const btnSet = node.querySelector('.btnSet');
-      btnDelta.addEventListener('click', async ()=>{
-        const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: 1, timestamp: new Date().toISOString(), source: 'mobile' };
+
+      // + / - now add or subtract one display unit (multiplied by category multiplier)
+      btnPlus.setAttribute('aria-label', `Add one ${unit.label} to ${it.label}`);
+      btnMinus.setAttribute('aria-label', `Subtract one ${unit.label} from ${it.label}`);
+      btnSet.setAttribute('aria-label', `Set absolute count for ${it.label}`);
+
+      btnPlus.addEventListener('click', async ()=>{
+        const unitInfo = getUnitInfo(it.category);
+        const qty = unitInfo.multiplier; // one unit in base quantity
+        const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: qty, timestamp: new Date().toISOString(), source: 'mobile' };
         await IDB.addEvent(ev);
         await refreshQueued();
       });
+
+      btnMinus.addEventListener('click', async ()=>{
+        const unitInfo = getUnitInfo(it.category);
+        const qty = -unitInfo.multiplier; // subtract one unit
+        const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: qty, timestamp: new Date().toISOString(), source: 'mobile' };
+        await IDB.addEvent(ev);
+        await refreshQueued();
+      });
+
       btnSet.addEventListener('click', async ()=>{
         const val = prompt('Enter absolute count for '+it.label);
         if (val===null) return;
         const n = parseInt(val,10);
         if (Number.isNaN(n)) { alert('Invalid number'); return; }
-        const ev = { id: uuidv4(), itemId: it.id, type: 'SET', qty: n, timestamp: new Date().toISOString(), source: 'mobile' };
+        const unitInfo = getUnitInfo(it.category);
+        const qty = n * unitInfo.multiplier;
+        const ev = { id: uuidv4(), itemId: it.id, type: 'SET', qty: qty, timestamp: new Date().toISOString(), source: 'mobile' };
         await IDB.addEvent(ev);
         await refreshQueued();
       });
