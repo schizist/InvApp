@@ -274,4 +274,11 @@
   setStatus(navigator.onLine ? 'online' : 'offline');
   await refreshAll();
   await refreshQueued();
+  // theme: apply persisted theme and wire toggle
+  (function(){
+    const toggle = document.getElementById('themeToggle');
+    function applyTheme(t){ if (t) document.body.setAttribute('data-theme', t); else document.body.removeAttribute('data-theme'); localStorage.setItem('invapp.theme', t||''); if (toggle) toggle.textContent = (t==='dark')? 'Light' : 'Dark'; }
+    const saved = localStorage.getItem('invapp.theme'); if (saved==='dark') applyTheme('dark');
+    if (toggle) toggle.addEventListener('click', ()=>{ const cur = document.body.getAttribute('data-theme'); applyTheme(cur==='dark'? null : 'dark'); });
+  })();
 })();

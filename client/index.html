@@ -7,6 +7,13 @@
   <link rel="manifest" href="/manifest.json">
   <style>
     :root{--bg:#ffffff;--fg:#0b0b0b;--accent:#1b5e20;--high-contrast-bg:#000;--high-contrast-fg:#fff}
+    body[data-theme="dark"]{ --bg:#050505; --fg:#eee; --accent:#66bb6a; --high-contrast-bg:#fff; --high-contrast-fg:#000 }
+    /* mirror prefers-color-scheme:dark overrides so the toggle affects hard-coded styles */
+    body[data-theme="dark"] .item{background:#0b0b0b;border-color:#222}
+    body[data-theme="dark"] .meta{color:#ccc}
+    body[data-theme="dark"] .controls button.btnPlus{background:#66bb6a}
+    body[data-theme="dark"] .controls button.btnMinus{background:#ef5350}
+    body[data-theme="dark"] .meta .delta{color:rgba(255,255,255,0.5)}
     html,body{height:100%;}
     body{font-family:system-ui,Segoe UI,Roboto,Arial,Helvetica,sans-serif;margin:0;padding:12px;background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased}
     h1{margin:0 0 8px 0;font-size:1.25rem}
@@ -39,6 +46,7 @@
   <div>
     <button id="syncBtn">Sync Now</button>
     <a id="historyLink" href="/history.html" style="margin-left:8px;padding:8px 12px;border-radius:8px;background:#eee;color:#111;text-decoration:none;font-weight:600">History</a>
+    <button id="themeToggle" style="margin-left:8px;padding:8px 12px;border-radius:8px;background:#fff;border:1px solid #ddd">Dark</button>
     <button id="startSessionBtn">Start Count Session</button>
     <button id="endSessionBtn" style="display:none">End Session</button>
     <span id="sessionInfo" style="margin-left:8px;color:#666"></span>

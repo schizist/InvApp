@@ -144,5 +144,8 @@
   window.show = show;
 
   // initial init after DOM ready
-  window.addEventListener('DOMContentLoaded', ()=>{ canvas = el('chartCanvas'); tooltip = el('tooltip'); attachCanvasEvents(); window.load(); resizeCanvas(); });
+  window.addEventListener('DOMContentLoaded', ()=>{ canvas = el('chartCanvas'); tooltip = el('tooltip'); attachCanvasEvents(); window.load(); resizeCanvas();
+    // apply persisted theme (no toggle on this page)
+    const saved = localStorage.getItem('invapp.theme'); if (saved==='dark') document.body.setAttribute('data-theme','dark');
+  });
 })();
