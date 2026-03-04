@@ -144,7 +144,7 @@
         if (Number.isNaN(n)) { alert('Invalid number'); return; }
         const unitInfo = getUnitInfo(it.category);
         const qty = n * unitInfo.multiplier;
-        const ev = { id: uuidv4(), itemId: it.id, type: 'SET', qty: qty, timestamp: new Date().toISOString(), source: 'mobile' };
+          const ev = { id: uuidv4(), itemId: it.id, type: 'COUNT', qty: qty, timestamp: new Date().toISOString(), source: 'mobile' };
         await IDB.addEvent(ev);
         await refreshQueued();
       });
@@ -218,7 +218,7 @@
       // fall back to local remoteEvents if available
       const remote = await IDB.getAllRemote();
       const map = {};
-      remote.forEach(ev => { map[ev.itemId] = map[ev.itemId] || {qty:0}; if (ev.type==='SET') map[ev.itemId].qty = ev.qty; else map[ev.itemId].qty = (map[ev.itemId].qty||0)+ev.qty; });
+      remote.forEach(ev => { map[ev.itemId] = map[ev.itemId] || {qty:0}; if (ev.type==='COUNT') map[ev.itemId].qty = ev.qty; else map[ev.itemId].qty = (map[ev.itemId].qty||0)+ev.qty; });
       // fetch local items list from embedded fallback
       const items = [{id:'wire_8',label:'#8',category:'wire'}];
       renderItems(items,map, {});

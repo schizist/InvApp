@@ -11,9 +11,27 @@ function init() {
       CREATE TABLE IF NOT EXISTS items (
         id TEXT PRIMARY KEY,
         label TEXT NOT NULL,
-        category TEXT
+        category TEXT,
+        reorderLevel INTEGER DEFAULT 0,
+        reorderQty INTEGER,
+        unit TEXT,
+        packSize INTEGER
       )
     `);
+
+    // Ensure new columns exist on older DBs (add if missing)
+    db.all(`PRAGMA table_info(items)`, (err, cols) => {
+      if (err) return console.error('PRAGMA table_info failed', err);
+      const names = (cols || []).map(c => c.name);
+      const toAdd = [];
+      if (!names.includes('reorderLevel')) toAdd.push(`ALTER TABLE items ADD COLUMN reorderLevel INTEGER DEFAULT 0`);
+      if (!names.includes('reorderQty')) toAdd.push(`ALTER TABLE items ADD COLUMN reorderQty INTEGER`);
+      if (!names.includes('unit')) toAdd.push(`ALTER TABLE items ADD COLUMN unit TEXT`);
+      if (!names.includes('packSize')) toAdd.push(`ALTER TABLE items ADD COLUMN packSize INTEGER`);
+      toAdd.forEach(sql => {
+        db.run(sql, err2 => { if (err2) console.warn('Failed to add column:', err2.message); });
+      });
+    });
 
     db.run(`
       CREATE TABLE IF NOT EXISTS events (
