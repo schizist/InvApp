@@ -13,6 +13,12 @@ init();
 app.use(cors());
 app.use(bodyParser.json());
 
+// simple request logger to aid debugging
+app.use((req, res, next) => {
+  console.log(new Date().toISOString(), req.method, req.path);
+  next();
+});
+
 // Serve client static files
 app.use('/', express.static(path.join(__dirname, '..', 'client')));
 
@@ -165,6 +171,22 @@ app.get('/api/summary', (req, res) => {
     });
   });
 });
+
+// Dump registered routes for debugging
+function listRoutes(){
+  console.log('Registered routes:');
+  if (!app._router) return;
+  app._router.stack.forEach(m => {
+    if (m.route && m.route.path){
+      const methods = Object.keys(m.route.methods).map(s=>s.toUpperCase()).join(',');
+      console.log(methods, m.route.path);
+    } else if (m.name === 'router' && m.handle && m.handle.stack){
+      m.handle.stack.forEach(r => { if (r.route && r.route.path){ const methods = Object.keys(r.route.methods).map(s=>s.toUpperCase()).join(','); console.log(methods, r.route.path); } });
+    }
+  });
+}
+
+listRoutes();
 
 app.listen(port, () => {
   console.log(`InvApp server listening on http://localhost:${port}`);

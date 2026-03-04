@@ -16,11 +16,32 @@
     const qs = [];
     if (from) qs.push('from='+encodeURIComponent(from));
     if (to) qs.push('to='+encodeURIComponent(to));
-    const res = await fetch('/api/items/'+encodeURIComponent(id)+'/history'+(qs.length?('?'+qs.join('&')):''));
-    if (!res.ok) { alert('Failed to fetch history'); return; }
+    let res;
+    try{
+      res = await fetch('/api/items/'+encodeURIComponent(id)+'/history'+(qs.length?('?'+qs.join('&')):''));
+    }catch(err){
+      console.error('Network error fetching history', err);
+      alert('Network error fetching history: '+(err && err.message ? err.message : err));
+      return;
+    }
+    if (!res.ok) {
+      let body = '';
+      try{ body = await res.text(); } catch(e){}
+      console.error('History fetch failed', res.status, body);
+      alert('Failed to fetch history — HTTP '+res.status+'\n'+body);
+      return;
+    }
     const json = await res.json();
-    renderSeries(json.series||[]);
-    renderEvents(json.events||[]);
+    const series = json.series||[];
+    const events = json.events||[];
+    if ((!series || series.length===0) && (!events || events.length===0)){
+      // show clear canvas message
+      drawSeries([]);
+      const out = el('events'); out.innerHTML = '<div style="color:#666">No history available for this item and date range.</div>';
+      return;
+    }
+    drawSeries(series);
+    renderEvents(events);
   }
 
   function renderEvents(events){
