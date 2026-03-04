@@ -42,6 +42,15 @@
   </style>
 </head>
 <body>
+  <script>
+    (function(){
+      try{
+        const t = localStorage.getItem('invapp.theme');
+        if (t === 'dark') document.body.setAttribute('data-theme','dark');
+        window.addEventListener('DOMContentLoaded', ()=>{ const btn = document.getElementById('themeToggle'); if (btn) btn.textContent = (t==='dark') ? 'Light' : 'Dark'; });
+      }catch(e){}
+    })();
+  </script>
   <h1>InvApp</h1>
   <div>
     <button id="syncBtn">Sync Now</button>
