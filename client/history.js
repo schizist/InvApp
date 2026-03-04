@@ -10,38 +10,38 @@
 
   function formatDate(d){ return d.toISOString().slice(0,10); }
 
+  // fetch events/history and draw COUNT session points across 12 months
   async function show(){
-    const id = el('item').value; const from = el('from').value; const to = el('to').value;
-    if (!id) return;
+    const id = el('item').value; if (!id) return;
     const qs = [];
-    if (from) qs.push('from='+encodeURIComponent(from));
-    if (to) qs.push('to='+encodeURIComponent(to));
+    if (el('from').value) qs.push('from='+encodeURIComponent(el('from').value));
+    if (el('to').value) qs.push('to='+encodeURIComponent(el('to').value));
     let res;
     try{
       res = await fetch('/api/items/'+encodeURIComponent(id)+'/history'+(qs.length?('?'+qs.join('&')):''));
     }catch(err){
       console.error('Network error fetching history', err);
-      alert('Network error fetching history: '+(err && err.message ? err.message : err));
+      el('events').innerHTML = '<div style="color:#c62828">Network error</div>';
       return;
     }
-    if (!res.ok) {
+    if (!res.ok){
       let body = '';
-      try{ body = await res.text(); } catch(e){}
+      try{ body = await res.text(); }catch(e){}
       console.error('History fetch failed', res.status, body);
-      alert('Failed to fetch history — HTTP '+res.status+'\n'+body);
+      el('events').innerHTML = `<div style="color:#c62828">Failed to fetch history — HTTP ${res.status}</div>`;
       return;
     }
     const json = await res.json();
-    const series = json.series||[];
-    const events = json.events||[];
-    if ((!series || series.length===0) && (!events || events.length===0)){
-      // show clear canvas message
-      drawSeries([]);
-      const out = el('events'); out.innerHTML = '<div style="color:#666">No history available for this item and date range.</div>';
-      return;
-    }
-    drawSeries(series);
-    renderEvents(events);
+    // extract COUNT session events and map
+    const countEvents = (json.events||[]).filter(e=>e.type==='COUNT').map(e=>({ ts: new Date(e.timestamp), qty: e.qty }));
+    const to = el('to').value ? new Date(el('to').value) : new Date();
+    const end = new Date(to.getFullYear(), to.getMonth(), 1, 23,59,59,999);
+    const start = new Date(end.getFullYear(), end.getMonth(), 1); start.setMonth(start.getMonth()-11);
+    const ptsFiltered = countEvents.filter(e => e.ts >= start && e.ts <= end).sort((a,b)=>a.ts - b.ts);
+    if (ptsFiltered.length === 0){ drawEmpty(); renderEvents(json.events||[]); return; }
+    const pts = ptsFiltered.map(p=>({ date: p.ts.toISOString().slice(0,10), qty: p.qty, ts: p.ts }));
+    drawCountSeries(pts, start, end);
+    renderEvents(json.events||[]);
   }
 
   function renderEvents(events){
@@ -111,6 +111,37 @@
     }catch(e){ /* ignore */ }
   }
 
+  // draw COUNT session points connected with line on a 12-month axis
+  function drawCountSeries(points, start, end){
+    lastSeries = points.map(p=>({ date: p.date, qty: p.qty, ts: p.ts }));
+    resizeCanvas();
+    const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height);
+    if (!points || points.length===0) return;
+    const pad = 40 * DPR; const w = canvas.width; const h = canvas.height; const areaW = w - pad*2; const areaH = h - pad*2;
+    const vals = points.map(p=>p.qty); const minV = Math.min(...vals, 0); const maxV = Math.max(...vals, 1); const vRange = (maxV - minV) || 1;
+    // draw grid
+    ctx.strokeStyle = '#e6e6e6'; ctx.lineWidth = 1*DPR; ctx.beginPath(); for (let i=0;i<=4;i++){ const yy = pad + (i/4)*areaH; ctx.moveTo(pad, yy); ctx.lineTo(pad+areaW, yy); } ctx.stroke();
+    // map functions
+    const mapX = (ts) => pad + ((ts.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * areaW;
+    const mapY = (v) => pad + (1 - (v - minV)/vRange) * areaH;
+    // draw line connecting points
+    ctx.beginPath(); ctx.strokeStyle = '#1976d2'; ctx.lineWidth = 2*DPR; points.forEach((p,i)=>{ const x=mapX(p.ts); const y=mapY(p.qty); if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke();
+    // draw points
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1976d2'; points.forEach(p=>{ const x=mapX(p.ts); const y=mapY(p.qty); ctx.beginPath(); ctx.arc(x,y,4*DPR,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
+    // x axis months labels (12 months)
+    ctx.fillStyle = '#333'; ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign = 'center';
+    for (let m=0;m<12;m++){ const dt = new Date(start.getFullYear(), start.getMonth()+m, 1); const x = pad + ((dt.getTime() - start.getTime())/(end.getTime()-start.getTime()))*areaW; const label = dt.toLocaleString(undefined,{month:'short'}); ctx.fillText(label, x, h - pad/2); }
+    // draw reorder line if present
+    try{
+      const sel = document.getElementById('item'); const opt = sel && sel.options[sel.selectedIndex]; const rl = opt && opt.dataset && opt.dataset.reorder ? parseFloat(opt.dataset.reorder) : null;
+      if (rl !== null && !Number.isNaN(rl)){
+        const y = mapY(rl);
+        ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2*DPR; ctx.setLineDash([6*DPR,4*DPR]); ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad+areaW, y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = '#c62828'; ctx.font = `${11*DPR}px sans-serif`; ctx.textAlign='right'; ctx.fillText('Reorder: '+rl, pad+areaW-6*DPR, y - 6*DPR);
+      }
+    }catch(e){}
+  }
+
   function posToNearest(evt){
     if (!lastSeries || lastSeries.length===0) return null;
     const rect = canvas.getBoundingClientRect(); const x = (evt.clientX - rect.left) * DPR;
@@ -140,10 +171,13 @@
     await loadItems();
     const params = qs();
     if (params.itemId){ el('item').value = params.itemId; }
-    // default date range: last 30 days
-    const today = new Date(); const prior = new Date(today.getTime() - 1000*60*60*24*30);
-    el('to').value = formatDate(today); el('from').value = formatDate(prior);
-    if (params.itemId) { await show(); }
+    // default date range: last 12 months
+    const today = new Date(); const start = new Date(today.getFullYear(), today.getMonth(), 1); start.setMonth(start.getMonth()-11);
+    el('to').value = formatDate(today); el('from').value = formatDate(start);
+    // populate reorder input for selected item
+    const sel = el('item'); const opt = sel && sel.options[sel.selectedIndex]; el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
+    // auto-load history for selected item
+    await show();
   };
   // expose show to inline button
   window.show = show;
@@ -165,6 +199,6 @@
       }catch(e){ console.error(e); alert('Failed to save reorder: '+(e.message||e)); }
     }); }
     // populate reorder input when selection changes
-    const sel = el('item'); sel && sel.addEventListener('change', ()=>{ const opt = sel.options[sel.selectedIndex]; el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : ''; });
+    const sel = el('item'); sel && sel.addEventListener('change', async ()=>{ const opt = sel.options[sel.selectedIndex]; el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : ''; await show(); });
   });
 })();
