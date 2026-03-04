@@ -103,6 +103,60 @@
     }
   }
 
+  function buildSummaryFromEvents(events){
+    const byItem = {};
+    (events || []).forEach(ev => {
+      if (!ev || !ev.itemId) return;
+      if (!byItem[ev.itemId]) byItem[ev.itemId] = [];
+      byItem[ev.itemId].push(ev);
+    });
+    const out = {};
+    Object.keys(byItem).forEach(itemId => {
+      const evs = byItem[itemId].slice().sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+      let qty = 0;
+      let lastUpdate = null;
+      let lastCountIndex = -1;
+      for (let i = 0; i < evs.length; i++) {
+        if (evs[i].type === 'COUNT') lastCountIndex = i;
+      }
+      if (lastCountIndex >= 0) {
+        qty = evs[lastCountIndex].qty || 0;
+        for (let j = lastCountIndex + 1; j < evs.length; j++) {
+          if (evs[j].type === 'DELTA') qty += (evs[j].qty || 0);
+        }
+      } else {
+        evs.forEach(e => { if (e.type === 'DELTA') qty += (e.qty || 0); });
+      }
+      if (evs.length > 0) lastUpdate = evs[evs.length - 1].timestamp || null;
+      out[itemId] = { itemId, qty, lastUpdate };
+    });
+    return out;
+  }
+
+  function computeLocalQty(itemId, summaryMap, queuedMap){
+    const base = (summaryMap && summaryMap[itemId] && summaryMap[itemId].qty) ? summaryMap[itemId].qty : 0;
+    const queued = (queuedMap && queuedMap[itemId]) ? queuedMap[itemId] : 0;
+    return { baseQty: base, queuedDelta: queued, currentQty: base + queued };
+  }
+
+  async function getLocalViewState(){
+    const [items, remoteEvents, queued] = await Promise.all([
+      IDB.getLastItems(),
+      IDB.getAllRemote(),
+      IDB.getQueued()
+    ]);
+    const summaryMap = buildSummaryFromEvents(remoteEvents || []);
+    const queuedMap = {};
+    (queued || []).forEach(ev => { queuedMap[ev.itemId] = (queuedMap[ev.itemId] || 0) + (ev.qty || 0); });
+    return { items: items || [], summaryMap, queued: queued || [], queuedMap };
+  }
+
+  async function renderLocalView(){
+    const state = await getLocalViewState();
+    renderItems(state.items, state.summaryMap, state.queuedMap);
+    await refreshQueued(state.queued);
+  }
+
   // sync helpers (retry/backoff)
   function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
@@ -171,10 +225,11 @@
         labelEl.addEventListener('click', (ev)=>{ /* allow normal navigation to history */ });
       }
       const sm = summaryMap[it.id] || {qty:0,lastUpdate:null};
-      const queuedDelta = (queuedMap && queuedMap[it.id]) ? queuedMap[it.id] : 0;
+      const qtyState = computeLocalQty(it.id, summaryMap, queuedMap);
+      const queuedDelta = qtyState.queuedDelta;
       const unit = getUnitInfo(it.category);
-      const baseQty = sm.qty || 0;
-      const projectedBase = baseQty + queuedDelta;
+      const baseQty = qtyState.baseQty;
+      const projectedBase = qtyState.currentQty;
       const displayQty = (unit.multiplier>1) ? (projectedBase / unit.multiplier) : projectedBase;
       const metaEl = node.querySelector('.meta');
       metaEl.innerHTML = '';
@@ -211,16 +266,14 @@
         const unitInfo = getUnitInfo(it.category);
         const qty = unitInfo.multiplier; // one unit in base quantity
         const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: qty, timestamp: new Date().toISOString(), source: 'mobile' };
-        await IDB.addEvent(ev);
-        await refreshAll();
+        await queueEvent(ev);
       });
 
       btnMinus.addEventListener('click', async ()=>{
         const unitInfo = getUnitInfo(it.category);
         const qty = -unitInfo.multiplier; // subtract one unit
         const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: qty, timestamp: new Date().toISOString(), source: 'mobile' };
-        await IDB.addEvent(ev);
-        await refreshAll();
+        await queueEvent(ev);
       });
 
       btnSet.addEventListener('click', async ()=>{
@@ -230,15 +283,14 @@
         if (Number.isNaN(n)) { alert('Invalid number'); return; }
         const qty = n;
         const ev = { id: uuidv4(), itemId: it.id, type: 'COUNT', qty: qty, timestamp: new Date().toISOString(), source: 'mobile', sessionId: currentSession };
-        await IDB.addEvent(ev);
-        await refreshAll();
+        await queueEvent(ev);
       });
       itemsEl.appendChild(node);
     });
   }
 
-  async function refreshQueued(){
-    const q = await IDB.getQueued();
+  async function refreshQueued(preloaded){
+    const q = preloaded || await IDB.getQueued();
     if (queuedCountEl) queuedCountEl.textContent = String((q || []).length);
     if (!q || q.length===0) {
       queuedEl.textContent = 'No queued events';
@@ -296,7 +348,17 @@
     }
   }
 
+  async function queueEvent(ev){
+    await IDB.addEvent(ev);
+    await renderLocalView();
+  }
+
   async function refreshAll(){
+    if (!navigator.onLine){
+      setStatus('offline');
+      await renderLocalView();
+      return;
+    }
     try{
       const [items, summary] = await Promise.all([fetchItems(), fetchSummary()]);
       const summaryMap = {};
@@ -307,14 +369,7 @@
     }catch(e){
       console.warn('offline or fetch failed', e);
       setStatus('offline');
-      // fall back to local remoteEvents if available
-      const remote = await IDB.getAllRemote();
-      const map = {};
-      remote.forEach(ev => { map[ev.itemId] = map[ev.itemId] || {qty:0}; if (ev.type==='COUNT') map[ev.itemId].qty = ev.qty; else map[ev.itemId].qty = (map[ev.itemId].qty||0)+ev.qty; });
-      const items = await IDB.getLastItems() || [];
-      const queuedMap = await getQueuedMap();
-      renderItems(items, map, queuedMap);
-      await refreshQueued();
+      await renderLocalView();
     }
   }
 
@@ -322,6 +377,12 @@
   syncBtn.addEventListener('click', async ()=>{
     await syncOnce();
   });
+
+  // ensure navigation is never gated by online state
+  const barsLink = document.getElementById('barsLink');
+  const historyLink = document.getElementById('historyLink');
+  if (barsLink) barsLink.addEventListener('click', () => { window.location.href = '/bars.html'; });
+  if (historyLink) historyLink.addEventListener('click', () => { window.location.href = '/history.html'; });
 
   window.addEventListener('online', ()=>{ setStatus('online'); syncOnce(); });
   window.addEventListener('offline', ()=>{ setStatus('offline'); refreshQueued(); });

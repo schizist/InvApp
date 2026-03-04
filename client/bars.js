@@ -17,9 +17,39 @@
 
   async function load(){
     resize();
-    const [items, summary] = await Promise.all([fetch('/api/items').then(r=>r.json()), fetch('/api/summary').then(r=>r.json())]);
+    let items = [];
+    let summary = [];
+    try{
+      const [itemsRes, summaryRes] = await Promise.all([fetch('/api/items'), fetch('/api/summary')]);
+      if (!itemsRes.ok || !summaryRes.ok) throw new Error('fetch failed');
+      items = await itemsRes.json();
+      summary = await summaryRes.json();
+      await IDB.setLastItems(items);
+    }catch(e){
+      items = await IDB.getLastItems() || [];
+      const remote = await IDB.getAllRemote();
+      const queued = await IDB.getQueued();
+      const byItem = {};
+      [...(remote || []), ...(queued || [])].forEach(ev => {
+        byItem[ev.itemId] = byItem[ev.itemId] || [];
+        byItem[ev.itemId].push(ev);
+      });
+      summary = Object.keys(byItem).map(itemId => {
+        const evs = byItem[itemId].sort((a,b)=> (a.timestamp||'').localeCompare(b.timestamp||''));
+        let qty = 0;
+        let lastCountIndex = -1;
+        for (let i=0;i<evs.length;i++) if (evs[i].type === 'COUNT') lastCountIndex = i;
+        if (lastCountIndex >= 0){
+          qty = evs[lastCountIndex].qty || 0;
+          for (let j=lastCountIndex+1;j<evs.length;j++) if (evs[j].type==='DELTA') qty += (evs[j].qty || 0);
+        } else {
+          evs.forEach(e=>{ if (e.type==='DELTA') qty += (e.qty || 0); });
+        }
+        return { itemId, qty };
+      });
+    }
     const map = {};
-    summary.forEach(s=>map[s.itemId]=s.qty);
+    (summary || []).forEach(s=>map[s.itemId]=s.qty);
     // prepare data: label, qty, reorder
     const data = items.map(it=>({ id: it.id, label: it.label, qty: map[it.id]||0, reorder: (typeof it.reorderLevel!=='undefined' && it.reorderLevel!==null)?it.reorderLevel: null }));
     lastData = data;

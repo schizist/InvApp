@@ -12,8 +12,41 @@
     if (lastSeries && lastSeries.length > 0) drawSeries(lastSeries);
   }
 
+  function parseDateInput(v, endOfDay){
+    if (!v) return null;
+    if (endOfDay) return new Date(v + 'T23:59:59.999');
+    return new Date(v + 'T00:00:00.000');
+  }
+
+  async function getLocalHistory(itemId, fromDate, toDate){
+    const [remote, queued] = await Promise.all([IDB.getAllRemote(), IDB.getQueued()]);
+    const all = [...(remote || []), ...(queued || [])];
+    const uniqueById = {};
+    all.forEach(ev => { if (ev && ev.id) uniqueById[ev.id] = ev; });
+    const fromTs = fromDate ? fromDate.getTime() : null;
+    const toTs = toDate ? toDate.getTime() : null;
+    return Object.values(uniqueById)
+      .filter(ev => ev.itemId === itemId)
+      .filter(ev => {
+        const ts = new Date(ev.timestamp).getTime();
+        if (Number.isNaN(ts)) return false;
+        if (fromTs !== null && ts < fromTs) return false;
+        if (toTs !== null && ts > toTs) return false;
+        return true;
+      })
+      .sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+  }
+
   async function loadItems(){
-    const items = await fetch('/api/items').then(r=>r.json()).catch(()=>[]);
+    let items = [];
+    try{
+      const res = await fetch('/api/items');
+      if (!res.ok) throw new Error('items fetch failed');
+      items = await res.json();
+      await IDB.setLastItems(items);
+    }catch(e){
+      items = await IDB.getLastItems() || [];
+    }
     const sel = el('item'); sel.innerHTML='';
     items.forEach(it=>{ const o=document.createElement('option'); o.value=it.id; o.textContent=it.label; if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) o.dataset.reorder = String(it.reorderLevel); sel.appendChild(o); });
   }
@@ -23,37 +56,32 @@
   // fetch events/history and draw COUNT session points across 12 months
   async function show(){
     const id = el('item').value; if (!id) return;
-    const qs = [];
-    if (el('from').value) qs.push('from='+encodeURIComponent(el('from').value));
-    if (el('to').value) qs.push('to='+encodeURIComponent(el('to').value));
-    let res;
+    const fromDate = parseDateInput(el('from').value, false);
+    const toDate = parseDateInput(el('to').value, true);
+    let events = [];
     try{
-      res = await fetch('/api/items/'+encodeURIComponent(id)+'/history'+(qs.length?('?'+qs.join('&')):''));
+      const qs = [];
+      if (el('from').value) qs.push('from='+encodeURIComponent(el('from').value));
+      if (el('to').value) qs.push('to='+encodeURIComponent(el('to').value));
+      const res = await fetch('/api/items/'+encodeURIComponent(id)+'/history'+(qs.length?('?'+qs.join('&')):''));
+      if (!res.ok) throw new Error('history fetch failed ' + res.status);
+      const json = await res.json();
+      events = json.events || [];
+      if (events.length) await IDB.storeRemoteEvents(events);
     }catch(err){
-      console.error('Network error fetching history', err);
-      el('events').innerHTML = '<div style="color:#c62828">Network error</div>';
-      return;
+      events = await getLocalHistory(id, fromDate, toDate);
     }
-    if (!res.ok){
-      let body = '';
-      try{ body = await res.text(); }catch(e){}
-      console.error('History fetch failed', res.status, body);
-      el('events').innerHTML = `<div style="color:#c62828">Failed to fetch history — HTTP ${res.status}</div>`;
-      return;
-    }
-    const json = await res.json();
     // extract COUNT session events and map
-    const countEvents = (json.events||[]).filter(e=>e.type==='COUNT').map(e=>({ ts: new Date(e.timestamp), qty: e.qty }));
+    const countEvents = (events||[]).filter(e=>e.type==='COUNT').map(e=>({ ts: new Date(e.timestamp), qty: e.qty }));
     const to = el('to').value ? new Date(el('to').value) : new Date();
     const end = new Date(to.getFullYear(), to.getMonth(), 1, 23,59,59,999);
     const start = new Date(end.getFullYear(), end.getMonth(), 1); start.setMonth(start.getMonth()-11);
     const ptsFiltered = countEvents.filter(e => e.ts >= start && e.ts <= end).sort((a,b)=>a.ts - b.ts);
-    if (ptsFiltered.length === 0){ drawEmpty(); renderEvents(json.events||[]); return; }
+    if (ptsFiltered.length === 0){ drawEmpty(); renderEvents(events||[]); return; }
     const pts = ptsFiltered.map(p=>({ date: p.ts.toISOString().slice(0,10), qty: p.qty, ts: p.ts }));
     drawCountSeries(pts, start, end);
-    renderEvents(json.events||[]);
+    renderEvents(events||[]);
   }
-
   function renderEvents(events){
     const out = el('events'); out.innerHTML='';
     events.forEach(e=>{
@@ -152,6 +180,16 @@
         ctx.fillStyle = '#c62828'; ctx.font = `${11*DPR}px sans-serif`; ctx.textAlign='right'; ctx.fillText('Reorder: '+rl, pad+areaW-6*DPR, y - 6*DPR);
       }
     }catch(e){}
+  }
+
+  function drawEmpty(){
+    resizeCanvas();
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = document.body.getAttribute('data-theme') === 'dark' ? '#bbb' : '#666';
+    ctx.font = `${14*DPR}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('No count events in selected range', canvas.width / 2, canvas.height / 2);
   }
 
   function posToNearest(evt){
