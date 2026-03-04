@@ -38,7 +38,7 @@
 
     @keyframes spin{to{transform:translateY(-50%) rotate(360deg)}}
 
-    @media (prefers-color-scheme:dark){:root{--bg:#050505;--fg:#eee;--high-contrast-bg:#fff;--high-contrast-fg:#000} .item{background:#0b0b0b;border-color:#222} .meta{color:#ccc} .controls button.btnPlus{background:#66bb6a} .controls button.btnMinus{background:#ef5350} .meta .delta{color:rgba(255,255,255,0.5)}}
+    @media (prefers-color-scheme:dark){body:not([data-theme]){--bg:#050505;--fg:#eee;--high-contrast-bg:#fff;--high-contrast-fg:#000} body:not([data-theme]) .item{background:#0b0b0b;border-color:#222} body:not([data-theme]) .meta{color:#ccc} body:not([data-theme]) .controls button.btnPlus{background:#66bb6a} body:not([data-theme]) .controls button.btnMinus{background:#ef5350} body:not([data-theme]) .meta .delta{color:rgba(255,255,255,0.5)}}
 
     /* Header buttons uniform styling */
     #startSessionBtn, #syncBtn, #themeToggle, #endSessionBtn, #barsLink, #historyLink {
@@ -56,7 +56,7 @@
     (function(){
       try{
         const t = localStorage.getItem('invapp.theme');
-        if (t === 'dark') document.body.setAttribute('data-theme','dark');
+        if (t === 'dark' || t === 'light') document.body.setAttribute('data-theme', t);
         window.addEventListener('DOMContentLoaded', ()=>{ const btn = document.getElementById('themeToggle'); if (btn) btn.textContent = (t==='dark') ? 'Light' : 'Dark'; });
       }catch(e){}
     })();

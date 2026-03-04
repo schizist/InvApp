@@ -1,6 +1,16 @@
 (function(){
   function qs(){ return Object.fromEntries(new URLSearchParams(location.search)); }
   function el(id){ return document.getElementById(id); }
+  const themeToggle = () => el('themeToggle');
+
+  function applyTheme(t){
+    const next = t === 'dark' ? 'dark' : 'light';
+    document.body.setAttribute('data-theme', next);
+    localStorage.setItem('invapp.theme', next);
+    const btn = themeToggle();
+    if (btn) btn.textContent = next === 'dark' ? 'Light' : 'Dark';
+    if (lastSeries && lastSeries.length > 0) drawSeries(lastSeries);
+  }
 
   async function loadItems(){
     const items = await fetch('/api/items').then(r=>r.json()).catch(()=>[]);
@@ -71,6 +81,7 @@
   function drawSeries(series){
     lastSeries = series;
     resizeCanvas();
+    const dark = document.body.getAttribute('data-theme') === 'dark';
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0,0,canvas.width,canvas.height);
     if (!series || series.length===0) return;
@@ -83,7 +94,7 @@
     const vRange = (maxV - minV) || 1;
     const barW = areaW / series.length * 0.8;
     // grid lines
-    ctx.strokeStyle = '#e6e6e6'; ctx.lineWidth = 1 * DPR;
+    ctx.strokeStyle = dark ? '#3a3a3a' : '#e6e6e6'; ctx.lineWidth = 1 * DPR;
     ctx.beginPath();
     for (let i=0;i<=4;i++){ const yy = pad + (i/4)*areaH; ctx.moveTo(pad, yy); ctx.lineTo(pad+areaW, yy); }
     ctx.stroke();
@@ -96,7 +107,7 @@
       ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(barW), Math.floor(bh));
     });
     // draw x labels
-    ctx.fillStyle='#333'; ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign='center';
+    ctx.fillStyle = dark ? '#e0e0e0' : '#333'; ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign='center';
     series.forEach((s,i)=>{ const x = pad + i * (areaW / series.length) + (areaW/series.length)/2; ctx.fillText(s.date, x, h - pad/2); });
     // if current item has reorderLevel stored in dataset, draw horizontal reorder line
     try{
@@ -115,12 +126,13 @@
   function drawCountSeries(points, start, end){
     lastSeries = points.map(p=>({ date: p.date, qty: p.qty, ts: p.ts }));
     resizeCanvas();
+    const dark = document.body.getAttribute('data-theme') === 'dark';
     const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height);
     if (!points || points.length===0) return;
     const pad = 40 * DPR; const w = canvas.width; const h = canvas.height; const areaW = w - pad*2; const areaH = h - pad*2;
     const vals = points.map(p=>p.qty); const minV = Math.min(...vals, 0); const maxV = Math.max(...vals, 1); const vRange = (maxV - minV) || 1;
     // draw grid
-    ctx.strokeStyle = '#e6e6e6'; ctx.lineWidth = 1*DPR; ctx.beginPath(); for (let i=0;i<=4;i++){ const yy = pad + (i/4)*areaH; ctx.moveTo(pad, yy); ctx.lineTo(pad+areaW, yy); } ctx.stroke();
+    ctx.strokeStyle = dark ? '#3a3a3a' : '#e6e6e6'; ctx.lineWidth = 1*DPR; ctx.beginPath(); for (let i=0;i<=4;i++){ const yy = pad + (i/4)*areaH; ctx.moveTo(pad, yy); ctx.lineTo(pad+areaW, yy); } ctx.stroke();
     // map functions
     const mapX = (ts) => pad + ((ts.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * areaW;
     const mapY = (v) => pad + (1 - (v - minV)/vRange) * areaH;
@@ -129,7 +141,7 @@
     // draw points
     ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1976d2'; points.forEach(p=>{ const x=mapX(p.ts); const y=mapY(p.qty); ctx.beginPath(); ctx.arc(x,y,4*DPR,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
     // x axis months labels (12 months)
-    ctx.fillStyle = '#333'; ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign = 'center';
+    ctx.fillStyle = dark ? '#e0e0e0' : '#333'; ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign = 'center';
     for (let m=0;m<12;m++){ const dt = new Date(start.getFullYear(), start.getMonth()+m, 1); const x = pad + ((dt.getTime() - start.getTime())/(end.getTime()-start.getTime()))*areaW; const label = dt.toLocaleString(undefined,{month:'short'}); ctx.fillText(label, x, h - pad/2); }
     // draw reorder line if present
     try{
@@ -184,8 +196,10 @@
 
   // initial init after DOM ready
   window.addEventListener('DOMContentLoaded', ()=>{ canvas = el('chartCanvas'); tooltip = el('tooltip'); attachCanvasEvents(); window.load(); resizeCanvas();
-    // apply persisted theme (no toggle on this page)
-    const saved = localStorage.getItem('invapp.theme'); if (saved==='dark') document.body.setAttribute('data-theme','dark');
+    const saved = localStorage.getItem('invapp.theme');
+    applyTheme(saved === 'dark' ? 'dark' : 'light');
+    const themeBtn = themeToggle();
+    if (themeBtn){ themeBtn.addEventListener('click', ()=>{ const cur = document.body.getAttribute('data-theme'); applyTheme(cur === 'dark' ? 'light' : 'dark'); }); }
     // wire save reorder
     const saveBtn = el('saveReorder'); if (saveBtn){ saveBtn.addEventListener('click', async ()=>{
       const sel = el('item'); const id = sel.value; const val = el('reorderInput').value; if (!id) return alert('Select an item'); const n = parseInt(val,10); if (Number.isNaN(n)) return alert('Invalid number');
