@@ -35,20 +35,31 @@
     return res.json();
   }
 
-  function renderItems(items, summaryMap){
+  function renderItems(items, summaryMap, queuedMap){
     itemsEl.innerHTML = '';
     items.forEach(it => {
       const tpl = document.getElementById('itemTpl');
       const node = tpl.content.cloneNode(true);
       node.querySelector('.label').textContent = it.label;
       const sm = summaryMap[it.id] || {qty:0,lastUpdate:null};
+      const queuedDelta = (queuedMap && queuedMap[it.id]) ? queuedMap[it.id] : 0;
       const unit = getUnitInfo(it.category);
       const baseQty = sm.qty || 0;
-      const displayQty = (unit.multiplier>1) ? (baseQty / unit.multiplier) : baseQty;
+      const projectedBase = baseQty + queuedDelta;
+      const displayQty = (unit.multiplier>1) ? (projectedBase / unit.multiplier) : projectedBase;
       const metaEl = node.querySelector('.meta');
       metaEl.innerHTML = '';
-      const qtySpan = document.createElement('span'); qtySpan.className = 'qty'; qtySpan.textContent = baseQty;
+      // pre-sync server total
+      const pre = document.createElement('span'); pre.className = 'pre'; pre.textContent = baseQty;
+      // queued delta (center column)
+      const delta = document.createElement('span'); delta.className = 'delta';
+      const deltaDisplay = (unit.multiplier>1) ? (queuedDelta / unit.multiplier) : queuedDelta;
+      delta.textContent = (queuedDelta>0?'+':'') + deltaDisplay;
+      // projected total
+      const qtySpan = document.createElement('span'); qtySpan.className = 'qty'; qtySpan.textContent = projectedBase;
       const dispSpan = document.createElement('span'); dispSpan.className = 'display'; dispSpan.textContent = `(${displayQty} × ${unit.label})`;
+      metaEl.appendChild(pre);
+      metaEl.appendChild(delta);
       metaEl.appendChild(qtySpan);
       metaEl.appendChild(dispSpan);
       if (sm.lastUpdate) {
@@ -69,7 +80,7 @@
         const qty = unitInfo.multiplier; // one unit in base quantity
         const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: qty, timestamp: new Date().toISOString(), source: 'mobile' };
         await IDB.addEvent(ev);
-        await refreshQueued();
+        await refreshAll();
       });
 
       btnMinus.addEventListener('click', async ()=>{
@@ -77,7 +88,7 @@
         const qty = -unitInfo.multiplier; // subtract one unit
         const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: qty, timestamp: new Date().toISOString(), source: 'mobile' };
         await IDB.addEvent(ev);
-        await refreshQueued();
+        await refreshAll();
       });
 
       btnSet.addEventListener('click', async ()=>{
@@ -108,6 +119,13 @@
     }
   }
 
+  async function getQueuedMap(){
+    const q = await IDB.getQueued();
+    const map = {};
+    q.forEach(ev => { map[ev.itemId] = (map[ev.itemId]||0) + (ev.qty||0); });
+    return map;
+  }
+
   async function syncOnce(){
     try{
       setStatus('syncing');
@@ -135,7 +153,8 @@
       const [items, summary] = await Promise.all([fetchItems(), fetchSummary()]);
       const summaryMap = {};
       summary.forEach(s=>summaryMap[s.itemId]=s);
-      renderItems(items, summaryMap);
+      const queuedMap = await getQueuedMap();
+      renderItems(items, summaryMap, queuedMap);
       await refreshQueued();
     }catch(e){
       console.warn('offline or fetch failed',e);
@@ -145,7 +164,7 @@
       remote.forEach(ev => { map[ev.itemId] = map[ev.itemId] || {qty:0}; if (ev.type==='SET') map[ev.itemId].qty = ev.qty; else map[ev.itemId].qty = (map[ev.itemId].qty||0)+ev.qty; });
       // fetch local items list from embedded fallback
       const items = [{id:'wire_8',label:'#8',category:'wire'}];
-      renderItems(items,map);
+      renderItems(items,map, {});
       await refreshQueued();
     }
   }
