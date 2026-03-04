@@ -1,0 +1,10 @@
+Add selector for different databases with option to create new databases
+
+Add specific vender info for each item, company, point of contact, email address.
+
+Generate reorder report when item reaches reorder threshold. Includes vendor info and graph of supply levels. 
+
+Email reorder report to me
+
+Include item information in history page, rename history page 'Details'.
+
