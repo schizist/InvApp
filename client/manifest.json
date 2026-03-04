@@ -1,0 +1,9 @@
+{
+  "short_name": "InvApp",
+  "name": "InvApp - Inventory PWA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2b7a78",
+  "icons": []
+}

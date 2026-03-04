@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>InvApp - Inventory PWA</title>
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:1rem}
+    .item{display:flex;justify-content:space-between;align-items:center;padding:.5rem;border-bottom:1px solid #ddd}
+    button{margin-left:.5rem}
+    .controls{display:flex}
+    .queued{background:#fff3cd;border:1px solid #ffeeba;padding:.5rem;margin-top:1rem}
+  </style>
+</head>
+<body>
+  <h1>InvApp</h1>
+  <div>
+    <button id="syncBtn">Sync Now</button>
+    <span id="status">Status: unknown</span>
+  </div>
+
+  <h2>Items</h2>
+  <div id="items"></div>
+
+  <h3>Queued Events (offline)</h3>
+  <div id="queued"></div>
+
+  <template id="itemTpl">
+    <div class="item">
+      <div>
+        <div class="label"></div>
+        <div class="meta"></div>
+      </div>
+      <div class="controls">
+        <button class="btnDelta">+1</button>
+        <button class="btnSet">Set</button>
+      </div>
+    </div>
+  </template>
+
+  <script src="/idb.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

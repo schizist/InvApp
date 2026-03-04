@@ -1,0 +1,117 @@
+// Simple client app: register sw, list items, queue events, sync
+(async function(){
+  if ('serviceWorker' in navigator) {
+    try { await navigator.serviceWorker.register('/sw.js'); console.log('SW registered'); } catch(e){console.warn('SW failed',e);} 
+  }
+
+  const statusEl = document.getElementById('status');
+  const itemsEl = document.getElementById('items');
+  const queuedEl = document.getElementById('queued');
+  const syncBtn = document.getElementById('syncBtn');
+
+  function setStatus(s){ statusEl.textContent = 'Status: '+s; }
+  function uuidv4(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{const r=Math.random()*16|0;const v=c=='x'?r:(r&0x3|0x8);return v.toString(16);}); }
+
+  async function fetchItems(){
+    const res = await fetch('/api/items');
+    return res.json();
+  }
+
+  async function fetchSummary(){
+    const res = await fetch('/api/summary');
+    return res.json();
+  }
+
+  function renderItems(items, summaryMap){
+    itemsEl.innerHTML = '';
+    items.forEach(it => {
+      const tpl = document.getElementById('itemTpl');
+      const node = tpl.content.cloneNode(true);
+      node.querySelector('.label').textContent = it.label;
+      const sm = summaryMap[it.id] || {qty:0,lastUpdate:null};
+      node.querySelector('.meta').textContent = 'Qty: '+ (sm.qty||0) + (sm.lastUpdate?(' • '+new Date(sm.lastUpdate).toLocaleString()):'');
+      const btnDelta = node.querySelector('.btnDelta');
+      const btnSet = node.querySelector('.btnSet');
+      btnDelta.addEventListener('click', async ()=>{
+        const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: 1, timestamp: new Date().toISOString(), source: 'mobile' };
+        await IDB.addEvent(ev);
+        await refreshQueued();
+      });
+      btnSet.addEventListener('click', async ()=>{
+        const val = prompt('Enter absolute count for '+it.label);
+        if (val===null) return;
+        const n = parseInt(val,10);
+        if (Number.isNaN(n)) { alert('Invalid number'); return; }
+        const ev = { id: uuidv4(), itemId: it.id, type: 'SET', qty: n, timestamp: new Date().toISOString(), source: 'mobile' };
+        await IDB.addEvent(ev);
+        await refreshQueued();
+      });
+      itemsEl.appendChild(node);
+    });
+  }
+
+  async function refreshQueued(){
+    const q = await IDB.getQueued();
+    if (!q || q.length===0) {
+      queuedEl.textContent = 'No queued events';
+    } else {
+      queuedEl.innerHTML = '';
+      q.forEach(ev => {
+        const d = document.createElement('div'); d.textContent = `${ev.type} ${ev.qty} → ${ev.itemId} @ ${new Date(ev.timestamp).toLocaleString()}`;
+        queuedEl.appendChild(d);
+      });
+    }
+  }
+
+  async function syncOnce(){
+    try{
+      setStatus('syncing');
+      const q = await IDB.getQueued();
+      if (q.length>0){
+        const res = await fetch('/api/events', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(q) });
+        const json = await res.json();
+        // remove inserted ones (we assume successful insertion)
+        const ids = q.map(e=>e.id);
+        await IDB.clearEvents(ids);
+      }
+      // fetch remote events to store locally if needed
+      const since = new Date(0).toISOString();
+      const remote = await fetch('/api/events?since='+encodeURIComponent(since)).then(r=>r.json());
+      await IDB.storeRemoteEvents(remote);
+      setStatus('up to date');
+      await refreshAll();
+    }catch(e){
+      console.error(e); setStatus('sync failed');
+    }
+  }
+
+  async function refreshAll(){
+    try{
+      const [items, summary] = await Promise.all([fetchItems(), fetchSummary()]);
+      const summaryMap = {};
+      summary.forEach(s=>summaryMap[s.itemId]=s);
+      renderItems(items, summaryMap);
+      await refreshQueued();
+    }catch(e){
+      console.warn('offline or fetch failed',e);
+      // fall back to local remoteEvents if available
+      const remote = await IDB.getAllRemote();
+      const map = {};
+      remote.forEach(ev => { map[ev.itemId] = map[ev.itemId] || {qty:0}; if (ev.type==='SET') map[ev.itemId].qty = ev.qty; else map[ev.itemId].qty = (map[ev.itemId].qty||0)+ev.qty; });
+      // fetch local items list from embedded fallback
+      const items = [{id:'wire_8',label:'#8',category:'wire'}];
+      renderItems(items,map);
+      await refreshQueued();
+    }
+  }
+
+  syncBtn.addEventListener('click', syncOnce);
+
+  window.addEventListener('online', ()=>{ setStatus('online'); syncOnce(); });
+  window.addEventListener('offline', ()=>{ setStatus('offline'); });
+
+  // initial
+  setStatus(navigator.onLine ? 'online' : 'offline');
+  await refreshAll();
+  await refreshQueued();
+})();

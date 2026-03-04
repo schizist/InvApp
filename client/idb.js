@@ -1,0 +1,81 @@
+// Minimal IndexedDB helper
+(function(global){
+  const DB_NAME = 'invapp';
+  const DB_VERSION = 1;
+  let dbp = null;
+
+  function open() {
+    if (dbp) return dbp;
+    dbp = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('events')) {
+          const store = db.createObjectStore('events', { keyPath: 'id' });
+          store.createIndex('timestamp', 'timestamp');
+          store.createIndex('itemId', 'itemId');
+        }
+        if (!db.objectStoreNames.contains('remoteEvents')) {
+          db.createObjectStore('remoteEvents', { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbp;
+  }
+
+  async function addEvent(ev) {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('events','readwrite');
+      tx.objectStore('events').put(ev);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  async function getQueued() {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('events','readonly');
+      const req = tx.objectStore('events').getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  async function clearEvents(ids) {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('events','readwrite');
+      const store = tx.objectStore('events');
+      ids.forEach(id => store.delete(id));
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  async function storeRemoteEvents(events) {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('remoteEvents','readwrite');
+      const store = tx.objectStore('remoteEvents');
+      events.forEach(e => store.put(e));
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  async function getAllRemote() {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('remoteEvents','readonly');
+      const req = tx.objectStore('remoteEvents').getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  global.IDB = { addEvent, getQueued, clearEvents, storeRemoteEvents, getAllRemote };
+})(window);
