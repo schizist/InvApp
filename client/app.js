@@ -128,13 +128,12 @@
       const metaEl = node.querySelector('.meta');
       metaEl.innerHTML = '';
       // pre-sync server total
-      const pre = document.createElement('span'); pre.className = 'pre'; pre.textContent = baseQty;
+      const pre = document.createElement('span'); pre.className = 'pre'; pre.textContent = `Existing: ${baseQty}`;
       // queued delta (center column)
       const delta = document.createElement('span'); delta.className = 'delta';
-      const deltaDisplay = (unit.multiplier>1) ? (queuedDelta / unit.multiplier) : queuedDelta;
-      delta.textContent = (queuedDelta>0?'+':'') + deltaDisplay;
+      delta.textContent = `Delta: ${(queuedDelta>0?'+':'') + queuedDelta}`;
       // projected total
-      const qtySpan = document.createElement('span'); qtySpan.className = 'qty'; qtySpan.textContent = projectedBase;
+      const qtySpan = document.createElement('span'); qtySpan.className = 'qty'; qtySpan.textContent = `Current: ${projectedBase}`;
       const dispSpan = document.createElement('span'); dispSpan.className = 'display'; dispSpan.textContent = `(${displayQty} × ${unit.label})`;
       metaEl.appendChild(pre);
       metaEl.appendChild(delta);
@@ -148,26 +147,9 @@
       const btnMinus = node.querySelector('.btnMinus');
       const btnSet = node.querySelector('.btnSet');
       const badge = node.querySelector('.reorderBadge');
-      const editBtn = node.querySelector('.editReorder');
 
       // show reorder badge when below threshold
       if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null){ if (sm && (sm.qty || 0) <= (it.reorderLevel || 0)) { badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; } }
-
-      // edit reorder threshold
-      if (editBtn){ editBtn.addEventListener('click', async ()=>{
-        const cur = (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) ? it.reorderLevel : 0;
-        const v = prompt('Set reorder threshold (quantity in base units) for '+it.label, String(cur));
-        if (v === null) return;
-        const n = parseInt(v,10);
-        if (Number.isNaN(n)) { alert('Invalid number'); return; }
-        // call API to update
-        try{
-          const res = await fetch('/api/items/'+encodeURIComponent(it.id), { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ reorderLevel: n }) });
-          if (!res.ok) throw new Error('update failed '+res.status);
-          const updated = await res.json();
-          await refreshAll();
-        }catch(e){ console.error('Failed to update reorder', e); alert('Failed to update reorder: '+(e.message||e)); }
-      }); }
 
       // + / - now add or subtract one display unit (multiplied by category multiplier)
       btnPlus.setAttribute('aria-label', `Add one ${unit.label} to ${it.label}`);
@@ -195,8 +177,7 @@
         if (val===null) return;
         const n = parseInt(val,10);
         if (Number.isNaN(n)) { alert('Invalid number'); return; }
-        const unitInfo = getUnitInfo(it.category);
-        const qty = n * unitInfo.multiplier;
+        const qty = n;
         const ev = { id: uuidv4(), itemId: it.id, type: 'COUNT', qty: qty, timestamp: new Date().toISOString(), source: 'mobile', sessionId: currentSession };
         await IDB.addEvent(ev);
         await refreshAll();
