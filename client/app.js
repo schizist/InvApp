@@ -5,11 +5,21 @@
   }
 
   const statusEl = document.getElementById('status');
+  const statusPillEl = document.getElementById('statusPill');
+  const queuedCountEl = document.getElementById('queuedCount');
   const itemsEl = document.getElementById('items');
   const queuedEl = document.getElementById('queued');
   const syncBtn = document.getElementById('syncBtn');
 
-  function setStatus(s){ statusEl.textContent = 'Status: '+s; }
+  function setStatus(s){
+    const online = s === 'online' || s === 'syncing' || s === 'up to date';
+    if (statusEl) statusEl.textContent = 'Status: ' + s;
+    if (statusPillEl) {
+      statusPillEl.textContent = online ? 'Online' : 'Offline';
+      statusPillEl.classList.toggle('online', online);
+      statusPillEl.classList.toggle('offline', !online);
+    }
+  }
   function uuidv4(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{const r=Math.random()*16|0;const v=c=='x'?r:(r&0x3|0x8);return v.toString(16);}); }
 
   function getUnitInfo(category){
@@ -26,8 +36,18 @@
   }
 
   async function fetchItems(){
-    const res = await fetch('/api/items');
-    return res.json();
+    try{
+      const res = await fetch('/api/items');
+      if (!res.ok) throw new Error('items fetch failed');
+      const items = await res.json();
+      await IDB.setLastItems(items);
+      return items;
+    }catch(e){
+      setStatus('offline');
+      const localItems = await IDB.getLastItems();
+      if (localItems && localItems.length) return localItems;
+      throw e;
+    }
   }
 
   // session helpers
@@ -65,28 +85,49 @@
   }
 
   async function fetchSummary(){
-    const res = await fetch('/api/summary');
-    return res.json();
+    try{
+      const res = await fetch('/api/summary');
+      if (!res.ok) throw new Error('summary fetch failed');
+      return await res.json();
+    }catch(e){
+      setStatus('offline');
+      const remote = await IDB.getAllRemote();
+      const map = {};
+      remote.forEach(ev => {
+        map[ev.itemId] = map[ev.itemId] || { itemId: ev.itemId, qty: 0, lastUpdate: null };
+        if (ev.type === 'COUNT') map[ev.itemId].qty = ev.qty;
+        else map[ev.itemId].qty = (map[ev.itemId].qty || 0) + ev.qty;
+        map[ev.itemId].lastUpdate = ev.timestamp;
+      });
+      return Object.values(map);
+    }
   }
 
   // sync helpers (retry/backoff)
   function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
-  async function uploadQueuedWithRetry(maxAttempts = 5){
+  async function uploadQueuedWithRetry(maxAttempts = 3){
     let attempt = 0;
     let delay = 1000;
+    let totalProcessed = 0;
     while (attempt < maxAttempts){
       attempt++;
       try{
         const q = await IDB.getQueued();
-        if (!q || q.length === 0) return { inserted:0, ignored:0 };
-        const res = await fetch('/api/events', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(q), timeout: 10000 });
-        if (!res.ok) throw new Error('upload failed: '+res.status);
-        const json = await res.json();
-        // clear uploaded events locally
-        const ids = q.map(e=>e.id);
-        await IDB.clearEvents(ids);
-        return json;
+        if (!q || q.length === 0) return { processed: totalProcessed };
+        const processedIds = [];
+        for (const ev of q){
+          const res = await fetch('/api/events', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(ev) });
+          if (!res.ok) throw new Error('upload failed: ' + res.status);
+          const json = await res.json();
+          const uploaded = (json.inserted || 0) + (json.ignored || 0);
+          if (uploaded > 0) processedIds.push(ev.id);
+        }
+        if (processedIds.length){
+          totalProcessed += processedIds.length;
+          await IDB.clearEvents(processedIds);
+        }
+        return { processed: totalProcessed };
       }catch(e){
         console.warn('upload attempt', attempt, 'failed', e.message || e);
         if (attempt >= maxAttempts) throw e;
@@ -106,11 +147,13 @@
       // compute newest timestamp
       const maxTs = events.reduce((m,e)=> e.timestamp > m ? e.timestamp : m, last || events[0].timestamp);
       await IDB.setLastSynced(maxTs);
+      await IDB.setLastSyncTime(maxTs);
       return { eventsCount: events.length, last: maxTs };
     } else {
       // still update lastSynced to now to mark we've checked
       const now = new Date().toISOString();
       await IDB.setLastSynced(now);
+      await IDB.setLastSyncTime(now);
       return { eventsCount: 0, last: now };
     }
   }
@@ -196,6 +239,7 @@
 
   async function refreshQueued(){
     const q = await IDB.getQueued();
+    if (queuedCountEl) queuedCountEl.textContent = String((q || []).length);
     if (!q || q.length===0) {
       queuedEl.textContent = 'No queued events';
     } else {
@@ -215,6 +259,11 @@
   }
 
   async function syncOnce(){
+    if (!navigator.onLine){
+      setStatus('offline');
+      await refreshQueued();
+      return;
+    }
     try{
       setStatus('syncing');
       try { syncBtn.disabled = true; syncBtn.classList.add('loading'); syncBtn.textContent = 'Syncing'; } catch(e){}
@@ -230,7 +279,7 @@
       }
 
       // 2) fetch updates since lastSynced
-      const last = await IDB.getLastSynced() || new Date(0).toISOString();
+      const last = await IDB.getLastSyncTime() || await IDB.getLastSynced() || new Date(0).toISOString();
       try{
         await fetchUpdatesSince(last);
       }catch(e){
@@ -256,14 +305,15 @@
       renderItems(items, summaryMap, queuedMap);
       await refreshQueued();
     }catch(e){
-      console.warn('offline or fetch failed',e);
+      console.warn('offline or fetch failed', e);
+      setStatus('offline');
       // fall back to local remoteEvents if available
       const remote = await IDB.getAllRemote();
       const map = {};
       remote.forEach(ev => { map[ev.itemId] = map[ev.itemId] || {qty:0}; if (ev.type==='COUNT') map[ev.itemId].qty = ev.qty; else map[ev.itemId].qty = (map[ev.itemId].qty||0)+ev.qty; });
-      // fetch local items list from embedded fallback
-      const items = [{id:'wire_8',label:'#8',category:'wire'}];
-      renderItems(items,map, {});
+      const items = await IDB.getLastItems() || [];
+      const queuedMap = await getQueuedMap();
+      renderItems(items, map, queuedMap);
       await refreshQueued();
     }
   }
@@ -274,7 +324,7 @@
   });
 
   window.addEventListener('online', ()=>{ setStatus('online'); syncOnce(); });
-  window.addEventListener('offline', ()=>{ setStatus('offline'); });
+  window.addEventListener('offline', ()=>{ setStatus('offline'); refreshQueued(); });
 
   // periodic background sync (attempt every 30s when online)
   setInterval(() => { if (navigator.onLine) syncOnce(); }, 30000);

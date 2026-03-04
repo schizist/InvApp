@@ -1,7 +1,7 @@
 // Minimal IndexedDB helper
 (function(global){
   const DB_NAME = 'invapp';
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   let dbp = null;
 
   function open() {
@@ -94,6 +94,10 @@
   async function getLastSynced(){ return getMeta('lastSynced'); }
   async function setSession(sessionId){ return setMeta('sessionId', sessionId); }
   async function getSession(){ return getMeta('sessionId'); }
+  async function setLastItems(items){ return setMeta('lastItems', items || []); }
+  async function getLastItems(){ return getMeta('lastItems'); }
+  async function setLastSyncTime(ts){ return setMeta('lastSyncTime', ts); }
+  async function getLastSyncTime(){ return getMeta('lastSyncTime'); }
 
   async function getAllRemote() {
     const db = await open();
@@ -105,5 +109,19 @@
     });
   }
 
-  global.IDB = { addEvent, getQueued, clearEvents, storeRemoteEvents, getAllRemote, setLastSynced, getLastSynced, setSession, getSession };
+  global.IDB = {
+    addEvent,
+    getQueued,
+    clearEvents,
+    storeRemoteEvents,
+    getAllRemote,
+    setLastSynced,
+    getLastSynced,
+    setSession,
+    getSession,
+    setLastItems,
+    getLastItems,
+    setLastSyncTime,
+    getLastSyncTime
+  };
 })(window);

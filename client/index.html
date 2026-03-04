@@ -43,6 +43,10 @@
     .controls button.btnSet{background:#1976d2;width:32px;height:32px;border-radius:8px;font-size:0.65rem}
     .controls button:active{transform:translateY(1px)}
     #items{margin-top:12px}
+    #statusPill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:0.85rem;font-weight:700;margin-left:8px}
+    #statusPill.online{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7}
+    #statusPill.offline{background:#ffebee;color:#b71c1c;border:1px solid #ef9a9a}
+    #queueSummary{margin-top:8px;font-weight:600}
     #queued{background:#fff8e1;border:1px solid #ffe082;padding:.5rem;margin-top:1rem;border-radius:6px}
     #syncBtn{background:#2e7d32;color:#fff;padding:8px 12px;border-radius:8px;border:0;font-weight:600;margin-right:8px}
     #syncBtn.loading{position:relative}
@@ -81,14 +85,15 @@
     <a id="historyLink" href="/history.html">History</a>
     <button id="themeToggle">Dark</button>
     <button id="endSessionBtn" style="display:none">End Session</button>
-    <span id="sessionInfo" style="margin-left:8px;color:#666"></span>
-    <span id="status">Status: unknown</span>
+    <span id="statusPill" class="offline">Offline</span>
+    <span id="status" style="margin-left:8px;color:#666">Status: unknown</span>
   </div>
 
   <h2>Items</h2>
   <div id="items"></div>
 
   <h3>Queued Events (offline)</h3>
+  <div id="queueSummary">Queued events: <span id="queuedCount">0</span></div>
   <div id="queued"></div>
 
   <template id="itemTpl">
