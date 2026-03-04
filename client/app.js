@@ -15,7 +15,7 @@
   function getUnitInfo(category){
     // returns {multiplier, label}
     switch((category||'').toLowerCase()){
-      case 'wire': return {multiplier:100, label:"100ft"};
+      case 'wire': return {multiplier:500, label:"500ft"};
       case 'cap': return {multiplier:100, label:"100pcs"};
       case 'shot': return {multiplier:20, label:"20pcs"};
       case 'mold': return {multiplier:1, label:"pcs"};
