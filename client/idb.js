@@ -92,6 +92,8 @@
 
   async function setLastSynced(ts){ return setMeta('lastSynced', ts); }
   async function getLastSynced(){ return getMeta('lastSynced'); }
+  async function setSession(sessionId){ return setMeta('sessionId', sessionId); }
+  async function getSession(){ return getMeta('sessionId'); }
 
   async function getAllRemote() {
     const db = await open();
@@ -103,5 +105,5 @@
     });
   }
 
-  global.IDB = { addEvent, getQueued, clearEvents, storeRemoteEvents, getAllRemote, setLastSynced, getLastSynced };
+  global.IDB = { addEvent, getQueued, clearEvents, storeRemoteEvents, getAllRemote, setLastSynced, getLastSynced, setSession, getSession };
 })(window);

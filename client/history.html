@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>InvApp - History</title>
+  <style>
+    body{font-family:system-ui,Arial;padding:12px}
+    .controls{display:flex;gap:8px;align-items:center}
+    #chartWrap{width:100%;height:260px;border:1px solid #ddd;position:relative}
+    canvas{width:100%;height:100%;display:block}
+    #tooltip{position:absolute;background:#111;color:#fff;padding:6px;border-radius:6px;font-size:0.85rem;pointer-events:none;display:none}
+    .events{margin-top:12px}
+  </style>
+  <script src="/history.js"></script>
+</head>
+<body>
+  <h1>History</h1>
+  <div class="controls">
+    <select id="item"></select>
+    <input type="date" id="from" />
+    <input type="date" id="to" />
+    <button onclick="show()">Show</button>
+    <a href="/">Back</a>
+  </div>
+  <div id="chartWrap"><canvas id="chartCanvas"></canvas><div id="tooltip"></div></div>
+  <div id="events" class="events"></div>
+</body>
+</html>

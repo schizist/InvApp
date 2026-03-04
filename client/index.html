@@ -38,6 +38,10 @@
   <h1>InvApp</h1>
   <div>
     <button id="syncBtn">Sync Now</button>
+    <a id="historyLink" href="/history.html" style="margin-left:8px;padding:8px 12px;border-radius:8px;background:#eee;color:#111;text-decoration:none;font-weight:600">History</a>
+    <button id="startSessionBtn">Start Count Session</button>
+    <button id="endSessionBtn" style="display:none">End Session</button>
+    <span id="sessionInfo" style="margin-left:8px;color:#666"></span>
     <span id="status">Status: unknown</span>
   </div>
 
@@ -50,7 +54,7 @@
   <template id="itemTpl">
     <div class="item">
       <div>
-        <div class="label"></div>
+        <div class="label"><a class="labelText labelLink" href="#"></a> <span class="reorderBadge" style="display:none;margin-left:8px;background:#c62828;color:#fff;padding:2px 6px;border-radius:4px;font-size:0.8rem">REORDER</span></div>
         <div class="meta"></div>
       </div>
       <div class="controls">
