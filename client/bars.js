@@ -1,22 +1,28 @@
 (function(){
-  const canvas = document.getElementById('barsCanvas');
-  const tooltip = document.getElementById('tooltip');
+  const chartsEl = document.getElementById('charts');
   const themeToggle = document.getElementById('themeToggle');
   const DPR = window.devicePixelRatio || 1;
-  let lastData = [];
-  function resize(){ const wrap = document.getElementById('chartWrap'); const rect = wrap.getBoundingClientRect(); canvas.width = Math.floor(rect.width*DPR); canvas.height = Math.floor(rect.height*DPR); canvas.style.width = rect.width+'px'; canvas.style.height = rect.height+'px'; }
-  window.addEventListener('resize', resize);
+  let lastGroups = [];
 
   function applyTheme(t){
     const next = t === 'dark' ? 'dark' : 'light';
     document.body.setAttribute('data-theme', next);
     localStorage.setItem('invapp.theme', next);
     if (themeToggle) themeToggle.textContent = next === 'dark' ? 'Light' : 'Dark';
-    if (lastData.length) drawBars(lastData);
+    if (lastGroups.length) renderCharts(lastGroups);
+  }
+
+  function groupByCategory(data){
+    const out = {};
+    data.forEach(it => {
+      const key = (it.category || 'other').toLowerCase();
+      out[key] = out[key] || [];
+      out[key].push(it);
+    });
+    return Object.keys(out).sort((a,b)=>a.localeCompare(b)).map(key => ({ category: key, items: out[key] }));
   }
 
   async function load(){
-    resize();
     let items = [];
     let summary = [];
     try{
@@ -50,36 +56,81 @@
     }
     const map = {};
     (summary || []).forEach(s=>map[s.itemId]=s.qty);
-    // prepare data: label, qty, reorder
-    const data = items.map(it=>({ id: it.id, label: it.label, qty: map[it.id]||0, reorder: (typeof it.reorderLevel!=='undefined' && it.reorderLevel!==null)?it.reorderLevel: null }));
-    lastData = data;
-    drawBars(data);
+    const data = items.map(it=>({
+      id: it.id,
+      label: it.label,
+      category: it.category,
+      qty: map[it.id]||0,
+      reorder: (typeof it.reorderLevel!=='undefined' && it.reorderLevel!==null)?it.reorderLevel: null
+    }));
+    const grouped = groupByCategory(data);
+    lastGroups = grouped;
+    renderCharts(grouped);
   }
 
-  function drawBars(data){
+  function renderCharts(groups){
+    chartsEl.innerHTML = '';
+    groups.forEach(group => {
+      const details = document.createElement('details');
+      details.className = 'categoryChart';
+      details.open = true;
+      details.innerHTML = `<summary>${group.category.toUpperCase()} (${group.items.length})</summary><div class="chartWrap"><canvas></canvas><div class="tooltip"></div></div>`;
+      chartsEl.appendChild(details);
+      drawBars(details.querySelector('canvas'), details.querySelector('.tooltip'), group.items);
+    });
+  }
+
+  function drawBars(canvas, tooltip, data){
     const dark = document.body.getAttribute('data-theme') === 'dark';
-    const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height);
+    const wrap = canvas.parentElement;
+    const rect = wrap.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * DPR);
+    canvas.height = Math.floor(rect.height * DPR);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
     if (!data || data.length===0) return;
-    const padTop = 20*DPR; const padBottom = 60*DPR; const w = canvas.width; const h = canvas.height; const areaW = w - padTop*2; const areaH = h - padTop - padBottom; const areaX = padTop; const areaY = padTop;
-    const maxV = Math.max(...data.map(d=>d.qty), 1);
+    const padTop = 20*DPR;
+    const padBottom = 64*DPR;
+    const areaW = canvas.width - padTop*2;
+    const areaH = canvas.height - padTop - padBottom;
+    const areaX = padTop;
+    const areaY = padTop;
+    const maxV = Math.max(...data.map(d=>Math.max(d.qty, d.reorder || 0)), 1);
     const barW = Math.max(12*DPR, Math.floor(areaW / data.length * 0.7));
+    const bars = [];
     data.forEach((d,i)=>{
       const x = areaX + i*(areaW/data.length) + (areaW/data.length - barW)/2;
       const barH = Math.floor((d.qty / maxV) * areaH);
       const y = areaY + (areaH - barH);
-      ctx.fillStyle = '#1976d2'; ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(barW), Math.floor(barH));
-      // label (rotated 90deg CCW)
-      ctx.fillStyle = dark ? '#eee' : '#222'; ctx.font = `${11*DPR}px sans-serif`;
-      const labelX = x + barW/2; const labelY = h - padBottom/2;
+      ctx.fillStyle = '#1976d2';
+      ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(barW), Math.floor(barH));
+      ctx.fillStyle = dark ? '#eee' : '#222';
+      ctx.font = `${11*DPR}px sans-serif`;
+      const labelX = x + barW/2;
+      const labelY = canvas.height - padBottom/2;
       ctx.save(); ctx.translate(labelX, labelY); ctx.rotate(-Math.PI/2); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(d.label, 0, 0); ctx.restore();
-      // reorder marker (small red horizontal line across bar area)
       if (d.reorder !== null && !Number.isNaN(d.reorder)){
         const ry = areaY + (1 - (d.reorder / maxV)) * areaH;
         ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2*DPR; ctx.beginPath(); ctx.moveTo(x, ry); ctx.lineTo(x+barW, ry); ctx.stroke();
       }
+      bars.push({x, y, w: barW, h: barH, item: d});
     });
+
+    canvas.onmousemove = (ev)=>{
+      const r = canvas.getBoundingClientRect();
+      const px = (ev.clientX - r.left) * DPR;
+      const py = (ev.clientY - r.top) * DPR;
+      const hit = bars.find(b => px >= b.x && px <= (b.x + b.w) && py >= b.y && py <= (b.y + b.h));
+      if (!hit){ tooltip.style.display='none'; return; }
+      tooltip.style.display = 'block';
+      tooltip.textContent = `${hit.item.label}: ${hit.item.qty}`;
+      tooltip.style.left = `${(hit.x / DPR)}px`;
+      tooltip.style.top = `8px`;
+    };
+    canvas.onmouseleave = ()=>{ tooltip.style.display='none'; };
   }
 
+  window.addEventListener('resize', ()=>{ if (lastGroups.length) renderCharts(lastGroups); });
   window.addEventListener('DOMContentLoaded', ()=>{
     const saved = localStorage.getItem('invapp.theme');
     applyTheme(saved === 'dark' ? 'dark' : 'light');
