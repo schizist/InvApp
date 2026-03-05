@@ -132,7 +132,15 @@ app.get('/api/items/:id', (req, res) => {
   db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize FROM items WHERE id = ?`, [id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'not found' });
-    res.json(row);
+    db.all(
+      `SELECT id,itemId,vendorCompany,contactName,contactEmail,partNumber,price,shippingCost,moq,leadTimeDays,onTimeScore,updatedAt
+       FROM vendor_options WHERE itemId = ? ORDER BY onTimeScore DESC, price ASC`,
+      [id],
+      (vendorErr, vendors) => {
+        if (vendorErr) return res.status(500).json({ error: vendorErr.message });
+        res.json(Object.assign({}, row, { vendors: vendors || [] }));
+      }
+    );
   });
 });
 

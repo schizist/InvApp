@@ -46,6 +46,24 @@ function init() {
       )
     `);
 
+    db.run(`
+      CREATE TABLE IF NOT EXISTS vendor_options (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        itemId TEXT NOT NULL,
+        vendorCompany TEXT NOT NULL,
+        contactName TEXT,
+        contactEmail TEXT,
+        partNumber TEXT,
+        price REAL,
+        shippingCost REAL,
+        moq INTEGER,
+        leadTimeDays INTEGER,
+        onTimeScore REAL,
+        updatedAt TEXT NOT NULL,
+        UNIQUE(itemId, vendorCompany, partNumber)
+      )
+    `);
+
     // Preload items (insert or ignore) machine id, human readable name, catagory
     const items = [
       ["wire_10","#10 Wire","wire"],
@@ -92,6 +110,43 @@ function init() {
         if (err) console.error('Failed to remove stale items:', err);
       });
     }
+
+    const vendorStmt = db.prepare(`
+      INSERT OR IGNORE INTO vendor_options (
+        itemId, vendorCompany, contactName, contactEmail, partNumber,
+        price, shippingCost, moq, leadTimeDays, onTimeScore, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const now = new Date().toISOString();
+    items.forEach(([itemId]) => {
+      vendorStmt.run(
+        itemId,
+        'Core Supply Co.',
+        'Jordan Rivera',
+        'jordan.rivera@coresupply.example',
+        `CS-${itemId.toUpperCase()}`,
+        100,
+        15,
+        1,
+        14,
+        96,
+        now
+      );
+      vendorStmt.run(
+        itemId,
+        'Alt Source Manufacturing',
+        'Sam Patel',
+        'sam.patel@altsource.example',
+        `ASM-${itemId.toUpperCase()}`,
+        108,
+        12,
+        1,
+        21,
+        91,
+        now
+      );
+    });
+    vendorStmt.finalize();
   });
 }
 
