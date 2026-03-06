@@ -66,30 +66,42 @@ function init() {
 
     // Preload items (insert or ignore) machine id, human readable name, catagory
     const items = [
+      // Molds
+      ["mold_112","M-112","mold"],
+      ["mold_157","M-157","mold"],
+      ["mold_157-4","M-157-4","mold"],
+      ["mold_157-8","M-157-8","mold"],
+      ["mold_157-12","M-157-12","mold"],
+      ["mold_157-16","M-157-16","mold"],
+      ["mold_157-24","M-157-24","mold"],
+      ["mold_159","M-159","mold"],
+      ["mold_161","M-161","mold"],
+      ["mold_161-16","M-161-16","mold"],
+      ["mold_161-20","M-161-20","mold"],
+      ["mold_161-24","M-161-24","mold"],
+      // Wire
       ["wire_10","#10 Wire","wire"],
       ["wire_8","#8 Wire","wire"],
       ["wire_6","#6 Wire","wire"],
       ["wire_4","#4 Wire","wire"],
       ["wire_2","#2 Wire","wire"],
       ["wire_8_nsf","#8 NSF Wire","wire"],
-      ["mold_161","M-161","mold"],
-      ["mold_161-16","M-161-16","mold"],
-      ["mold_161-20","M-161-20","mold"],
-      ["mold_161-24","M-161-24","mold"],
-      ["mold_157","M-157","mold"],
-      ["mold_157-16","M-157-16","mold"],
-      ["mold_157-20","M-157-20","mold"],
-      ["mold_157-24","M-157-24","mold"],
-      ["mold_112","M-112","mold"],
-      ["cap_pc","ThermoCap","cap"],
+      // Shots
       ["shot_25_ci","25 CI","shot"],
       ["shot_25_cp","25 CP","shot"],
       ["shot_45_ci","45 CI","shot"],
       ["shot_45_cp","45 CP","shot"],
+      // Caps
+      ["cap_pc","ThermoCap","cap"],
+      // Enclosures
       ["enclosure_fink_blue","Blue Fink","enclosure"],
+      ["enclosure_fink_blue_steel","Blue Steel Fink","enclosure"],
       ["enclosure_fink_purple","Purple Fink","enclosure"],
       ["enclosure_g05","G05","enclosure"],
+      // Anodes
       ["anode_hp_mag","HP Mag Anode","anode"]
+      // Ref Cells
+      ["SRE-002","Stelth Cu-CuSO", "refcell"],
     ];
 
     const stmt = db.prepare(`
