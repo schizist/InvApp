@@ -99,7 +99,7 @@ function init() {
       ["enclosure_fink_purple","Purple Fink","enclosure"],
       ["enclosure_g05","G05","enclosure"],
       // Anodes
-      ["anode_hp_mag","HP Mag Anode","anode"]
+      ["anode_hp_mag","HP Mag Anode","anode"],
       // Ref Cells
       ["SRE-002","Stelth Cu-CuSO", "refcell"],
     ];

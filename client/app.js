@@ -10,6 +10,8 @@
   const itemsEl = document.getElementById('items');
   const queuedEl = document.getElementById('queued');
   const syncBtn = document.getElementById('syncBtn');
+  const OCCASIONAL_SYNC_MS = 5 * 60 * 1000;
+  let syncInFlight = null;
 
   function setStatus(s){
     const online = s === 'online' || s === 'syncing' || s === 'up to date';
@@ -35,6 +37,10 @@
     }
   }
 
+  function getBundledItems(){
+    return Array.isArray(window.INVAPP_DEFAULT_ITEMS) ? window.INVAPP_DEFAULT_ITEMS : [];
+  }
+
   async function fetchItems(){
     try{
       const res = await fetch('/api/items');
@@ -46,7 +52,7 @@
       setStatus('offline');
       const localItems = await IDB.getLastItems();
       if (localItems && localItems.length) return localItems;
-      throw e;
+      return getBundledItems();
     }
   }
 
@@ -316,6 +322,8 @@
   }
 
   async function syncOnce(){
+    if (syncInFlight) return syncInFlight;
+    syncInFlight = (async () => {
     if (!navigator.onLine){
       setStatus('offline');
       await refreshQueued();
@@ -351,11 +359,20 @@
       console.error(e); setStatus('sync failed');
       try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
     }
+    })();
+    try{
+      await syncInFlight;
+    }finally{
+      syncInFlight = null;
+    }
   }
 
   async function queueEvent(ev){
     await IDB.addEvent(ev);
     await renderLocalView();
+    if (navigator.onLine){
+      syncOnce().catch(err => console.warn('post-save sync failed', err));
+    }
   }
 
   async function refreshAll(){
@@ -392,13 +409,14 @@
   window.addEventListener('online', ()=>{ setStatus('online'); syncOnce(); });
   window.addEventListener('offline', ()=>{ setStatus('offline'); refreshQueued(); });
 
-  // periodic background sync (attempt every 30s when online)
-  setInterval(() => { if (navigator.onLine) syncOnce(); }, 30000);
+  // occasional background retry while app remains open
+  setInterval(() => { if (navigator.onLine) syncOnce(); }, OCCASIONAL_SYNC_MS);
 
   // initial
   setStatus(navigator.onLine ? 'online' : 'offline');
   await refreshAll();
   await refreshQueued();
+  if (navigator.onLine) syncOnce().catch(err => console.warn('initial sync failed', err));
   // theme: apply persisted theme and wire toggle
   (function(){
     const toggle = document.getElementById('themeToggle');

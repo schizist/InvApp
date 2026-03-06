@@ -23,6 +23,7 @@
   }
 
   async function load(){
+    const bundledItems = Array.isArray(window.INVAPP_DEFAULT_ITEMS) ? window.INVAPP_DEFAULT_ITEMS : [];
     let items = [];
     let summary = [];
     try{
@@ -32,7 +33,7 @@
       summary = await summaryRes.json();
       await IDB.setLastItems(items);
     }catch(e){
-      items = await IDB.getLastItems() || [];
+      items = await IDB.getLastItems() || bundledItems;
       const remote = await IDB.getAllRemote();
       const queued = await IDB.getQueued();
       const byItem = {};

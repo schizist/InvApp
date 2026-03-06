@@ -38,6 +38,7 @@
   }
 
   async function loadItems(){
+    const bundledItems = Array.isArray(window.INVAPP_DEFAULT_ITEMS) ? window.INVAPP_DEFAULT_ITEMS : [];
     let items = [];
     try{
       const res = await fetch('/api/items');
@@ -45,7 +46,7 @@
       items = await res.json();
       await IDB.setLastItems(items);
     }catch(e){
-      items = await IDB.getLastItems() || [];
+      items = await IDB.getLastItems() || bundledItems;
     }
     const sel = el('item'); sel.innerHTML='';
     items.forEach(it=>{ const o=document.createElement('option'); o.value=it.id; o.textContent=it.label; if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) o.dataset.reorder = String(it.reorderLevel); sel.appendChild(o); });
