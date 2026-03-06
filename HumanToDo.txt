@@ -4,6 +4,4 @@ Generate reorder report when item reaches reorder threshold. Includes vendor inf
 
 Email reorder report to me
 
-Separate items into collapsable categories 
-
-Different bar graphs for different categories
+Collasable categories automatically expand when I interact with the app. 
