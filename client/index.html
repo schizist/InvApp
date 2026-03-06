@@ -43,6 +43,13 @@
     .controls button.btnSet{background:#1976d2;width:32px;height:32px;border-radius:8px;font-size:0.65rem}
     .controls button:active{transform:translateY(1px)}
     #items{margin-top:12px}
+
+    .categoryGroup{margin-bottom:12px;border:1px solid #dbe2ea;border-radius:8px;background:rgba(2,6,23,0.02)}
+    .categoryTitle{cursor:pointer;padding:10px 12px;font-weight:700;list-style:none}
+    .categoryTitle::-webkit-details-marker{display:none}
+    .categoryTitle::before{content:'▾ ';font-size:0.9rem}
+    .categoryGroup:not([open]) .categoryTitle::before{content:'▸ '}
+    .categoryItems{padding:0 8px 8px}
     #statusPill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:0.85rem;font-weight:700;margin-left:8px}
     #statusPill.online{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7}
     #statusPill.offline{background:#ffebee;color:#b71c1c;border:1px solid #ef9a9a}
@@ -66,6 +73,7 @@
     body[data-theme="dark"] #themeToggle{ background:#222; color:#fff; border:1px solid #444 }
     body[data-theme="dark"] .labelLink{ color:#eee; background:#1b1d20; border-color:#3a3f45 }
     body[data-theme="dark"] .labelLink:hover{ background:#24282d }
+    body[data-theme="dark"] .categoryGroup{background:#0b0b0b;border-color:#222}
   </style>
 </head>
 <body>

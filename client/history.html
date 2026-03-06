@@ -38,6 +38,14 @@
     canvas{width:100%;height:100%;display:block}
     #tooltip{position:absolute;background:#111;color:#fff;padding:6px;border-radius:6px;font-size:0.85rem;pointer-events:none;display:none}
     .events{margin-top:12px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;max-height:320px;overflow:auto}
+    .vendorPanel{margin-top:12px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px}
+    .vendorList{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+    .vendorCard{border:1px solid var(--border);border-radius:10px;padding:10px;background:rgba(15,23,42,0.02)}
+    .vendorCard h3{margin:0 0 6px 0;font-size:1rem}
+    .vendorGrid{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;font-size:0.9rem}
+    .vendorGrid dt{font-weight:700;color:#334155}
+    .vendorGrid dd{margin:0;word-break:break-word}
+    .vendorEmpty{color:var(--muted)}
     .eventsTitle{font-size:0.95rem;font-weight:700;margin:4px 0 8px 0;color:#334155}
     body[data-theme="dark"]{ --bg:#050505; --fg:#eee; --panel:#0f1115; --border:#2b2f36; --muted:#9aa4b2; --accent:#14b8a6; --accent-2:#2563eb }
     body[data-theme="dark"] .field label{color:#cbd5e1}
@@ -93,6 +101,13 @@
   </div>
 
   <div id="chartWrap"><canvas id="chartCanvas"></canvas><div id="tooltip"></div></div>
+  <div class="vendorPanel">
+    <div class="eventsTitle">Vendor Options</div>
+    <div id="vendors" class="vendorList">
+      <div class="vendorEmpty">No vendor options found for this item.</div>
+    </div>
+  </div>
+
   <div class="events">
     <div class="eventsTitle">Events</div>
     <div id="events"></div>

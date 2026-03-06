@@ -53,9 +53,58 @@
 
   function formatDate(d){ return d.toISOString().slice(0,10); }
 
+
+  function currency(v){
+    const n = Number(v);
+    if (Number.isNaN(n)) return '—';
+    return `$${n.toFixed(2)}`;
+  }
+
+  function renderVendors(vendors){
+    const wrap = el('vendors');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!vendors || vendors.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'vendorEmpty';
+      empty.textContent = 'No vendor options found for this item.';
+      wrap.appendChild(empty);
+      return;
+    }
+    vendors.forEach(v => {
+      const card = document.createElement('article');
+      card.className = 'vendorCard';
+      card.innerHTML = `
+        <h3>${v.vendorCompany || 'Unknown vendor'}</h3>
+        <dl class="vendorGrid">
+          <dt>Point of Contact</dt><dd>${v.contactName || '—'}</dd>
+          <dt>POC Email</dt><dd>${v.contactEmail ? `<a href="mailto:${v.contactEmail}">${v.contactEmail}</a>` : '—'}</dd>
+          <dt>Part Number</dt><dd>${v.partNumber || '—'}</dd>
+          <dt>Price</dt><dd>${currency(v.price)}</dd>
+          <dt>Shipping</dt><dd>${currency(v.shippingCost)}</dd>
+          <dt>MOQ</dt><dd>${v.moq ?? '—'}</dd>
+          <dt>Lead Time</dt><dd>${v.leadTimeDays != null ? `${v.leadTimeDays} days` : '—'}</dd>
+          <dt>On-Time Score</dt><dd>${v.onTimeScore != null ? `${v.onTimeScore}%` : '—'}</dd>
+        </dl>
+      `;
+      wrap.appendChild(card);
+    });
+  }
+
   // fetch events/history and draw COUNT session points across 12 months
   async function show(){
     const id = el('item').value; if (!id) return;
+    try {
+      const itemRes = await fetch('/api/items/' + encodeURIComponent(id));
+      if (itemRes.ok) {
+        const item = await itemRes.json();
+        renderVendors(item.vendors || []);
+      } else {
+        renderVendors([]);
+      }
+    } catch (e) {
+      renderVendors([]);
+    }
     const fromDate = parseDateInput(el('from').value, false);
     const toDate = parseDateInput(el('to').value, true);
     let events = [];
