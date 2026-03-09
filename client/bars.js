@@ -107,12 +107,26 @@
       ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(barW), Math.floor(barH));
       ctx.fillStyle = dark ? '#eee' : '#222';
       ctx.font = `${11*DPR}px sans-serif`;
+
+      // Label current stock quantity above each bar.
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(String(d.qty), x + barW / 2, Math.max(areaY + 12 * DPR, y - 4 * DPR));
+
       const labelX = x + barW/2;
       const labelY = canvas.height - padBottom/2;
-      ctx.save(); ctx.translate(labelX, labelY); ctx.rotate(-Math.PI/2); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(d.label, 0, 0); ctx.restore();
+      ctx.save(); ctx.translate(labelX, labelY); ctx.rotate(-Math.PI*2); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(d.label, 0, 0); ctx.restore();
       if (d.reorder !== null && !Number.isNaN(d.reorder)){
         const ry = areaY + (1 - (d.reorder / maxV)) * areaH;
         ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2*DPR; ctx.beginPath(); ctx.moveTo(x, ry); ctx.lineTo(x+barW, ry); ctx.stroke();
+        // Label reorder threshold near the reorder marker line.
+        ctx.fillStyle = '#c62828';
+        ctx.font = `${10*DPR}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`Reorder ${d.reorder}`, x + barW / 2, Math.min(areaY + areaH - 12 * DPR, ry + 2 * DPR));
+        ctx.fillStyle = dark ? '#eee' : '#222';
+        ctx.font = `${11*DPR}px sans-serif`;
       }
       bars.push({x, y, w: barW, h: barH, item: d});
     });

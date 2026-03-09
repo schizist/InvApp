@@ -69,7 +69,7 @@ function init() {
       // Molds
       ["mold_112","M-112","mold"],
       ["mold_157","M-157","mold"],
-      ["mold_157-4","M-157-4","mold"],
+      ["mold_157-6","M-157-6","mold"],
       ["mold_157-8","M-157-8","mold"],
       ["mold_157-12","M-157-12","mold"],
       ["mold_157-16","M-157-16","mold"],
@@ -90,7 +90,6 @@ function init() {
       ["shot_25_ci","25 CI","shot"],
       ["shot_25_cp","25 CP","shot"],
       ["shot_45_ci","45 CI","shot"],
-      ["shot_45_cp","45 CP","shot"],
       // Caps
       ["cap_pc","ThermoCap","cap"],
       // Enclosures

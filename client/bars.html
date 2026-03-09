@@ -1,23 +1,45 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>InvApp - Bars</title>
+  <title>InvApp - Stock</title>
   <style>
-    :root{--bg:#ffffff;--fg:#111;--panel:#fff;--border:#ddd}
-    body{font-family:system-ui,Arial;padding:12px;background:var(--bg);color:var(--fg)}
+    :root{
+      --bg:#f4f6f8;
+      --fg:#0f172a;
+      --panel:#ffffff;
+      --border:#d8dee4;
+      --muted:#64748b;
+      --secondary:#e5e7eb;
+      --link:#111;
+    }
+    body[data-theme="dark"]{
+      --bg:#050505;
+      --fg:#eee;
+      --panel:#0f1115;
+      --border:#2b2f36;
+      --muted:#9aa4b2;
+      --secondary:#1b1f25;
+      --link:#e5e7eb;
+    }
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,Helvetica,sans-serif;margin:0;padding:16px;background:var(--bg);color:var(--fg)}
+    h1{margin:0;font-size:1.5rem}
+    .subtitle{margin:4px 0 0 0;color:var(--muted);font-size:0.95rem}
+    .topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+    .topActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 12px;border-radius:8px;border:1px solid transparent;text-decoration:none;font-weight:700;cursor:pointer}
+    .btnSecondary{background:var(--secondary);color:var(--link)}
+    .btnNeutral{background:var(--panel);color:var(--link);border-color:var(--border)}
     .categoryChart{border:1px solid var(--border);border-radius:10px;margin-top:10px;background:var(--panel)}
-    .categoryChart summary{padding:10px 12px;cursor:pointer;font-weight:700}
+    .categoryChart summary{padding:10px 12px;cursor:pointer;font-weight:700;list-style:none}
     .categoryChart summary::-webkit-details-marker{display:none}
-    .categoryChart summary::before{content:'▾ ';font-size:0.9rem}
-    .categoryChart:not([open]) summary::before{content:'▸ '}
+    .categoryChart summary::before{content:'v ';font-size:0.9rem}
+    .categoryChart:not([open]) summary::before{content:'> '}
     .chartWrap{width:100%;height:320px;border-top:1px solid var(--border);position:relative}
     canvas{width:100%;height:100%;display:block}
     .tooltip{position:absolute;background:#111;color:#fff;padding:6px;border-radius:6px;font-size:0.85rem;pointer-events:none;display:none}
-    body[data-theme="dark"]{ --bg:#050505; --fg:#eee; --panel:#0f1115; --border:#333 }
-    #themeToggle{margin-left:8px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:#fff;color:#111}
-    body[data-theme="dark"] #themeToggle{background:#222;color:#fff;border-color:#444}
+    body[data-theme="dark"] .tooltip{background:#fff;color:#000}
   </style>
 </head>
 <body>
@@ -29,8 +51,18 @@
       }catch(e){}
     })();
   </script>
-  <h1>Inventory Bars</h1>
-  <p><a href="/">Back</a><button id="themeToggle">Dark</button></p>
+
+  <div class="topbar">
+    <div>
+      <h1>Stock</h1>
+      <p class="subtitle">Current levels by category</p>
+    </div>
+    <div class="topActions">
+      <a href="/" class="btn btnSecondary">Home</a>
+      <button id="themeToggle" class="btn btnNeutral">Dark</button>
+    </div>
+  </div>
+
   <div id="charts"></div>
   <script src="/idb.js"></script>
   <script src="/catalog.js"></script>

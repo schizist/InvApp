@@ -339,7 +339,7 @@
       }catch(e){
         console.error('Upload failed after retries', e);
         setStatus('sync failed (upload)');
-        try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
+        try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync'; } catch(e){}
         return;
       }
 
@@ -354,10 +354,10 @@
 
       setStatus('up to date');
       await refreshAll();
-      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
+      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync'; } catch(e){}
     }catch(e){
       console.error(e); setStatus('sync failed');
-      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
+      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync'; } catch(e){}
     }
     })();
     try{
