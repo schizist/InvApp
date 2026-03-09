@@ -2,6 +2,7 @@
   function qs(){ return Object.fromEntries(new URLSearchParams(location.search)); }
   function el(id){ return document.getElementById(id); }
   const themeToggle = () => el('themeToggle');
+  const selectedVendorByItem = {};
 
   function applyTheme(t){
     const next = t === 'dark' ? 'dark' : 'light';
@@ -48,72 +49,161 @@
     }catch(e){
       items = await IDB.getLastItems() || bundledItems;
     }
-    const sel = el('item'); sel.innerHTML='';
-    items.forEach(it=>{ const o=document.createElement('option'); o.value=it.id; o.textContent=it.label; if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) o.dataset.reorder = String(it.reorderLevel); sel.appendChild(o); });
+    const sel = el('item');
+    sel.innerHTML='';
+    items.forEach(it=>{
+      const o=document.createElement('option');
+      o.value=it.id;
+      o.textContent=it.label;
+      if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) o.dataset.reorder = String(it.reorderLevel);
+      sel.appendChild(o);
+    });
   }
 
   function formatDate(d){ return d.toISOString().slice(0,10); }
 
-
-  function currency(v){
-    const n = Number(v);
-    if (Number.isNaN(n)) return '—';
-    return `$${n.toFixed(2)}`;
+  function escapeHtml(text){
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
-  function renderVendors(vendors){
+  function normalizeNumberInput(value){
+    if (value == null) return null;
+    const trimmed = String(value).trim();
+    if (!trimmed) return null;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function renderVendors(item){
     const wrap = el('vendors');
     if (!wrap) return;
     wrap.innerHTML = '';
-    if (!vendors || vendors.length === 0){
+
+    const vendorList = (item && item.vendorList) ? item.vendorList : [];
+    const vendorOptions = (item && item.vendors) ? item.vendors : [];
+
+    if (!vendorList.length){
       const empty = document.createElement('div');
       empty.className = 'vendorEmpty';
-      empty.textContent = 'No vendor options found for this item.';
+      empty.innerHTML = 'No vendors found. <a href="/vendors.html">Manage vendors</a>.';
       wrap.appendChild(empty);
       return;
     }
-    vendors.forEach(v => {
-      const card = document.createElement('article');
-      card.className = 'vendorCard';
-      card.innerHTML = `
-        <h3>${v.vendorCompany || 'Unknown vendor'}</h3>
-        <dl class="vendorGrid">
-          <dt>Point of Contact</dt><dd>${v.contactName || '—'}</dd>
-          <dt>POC Email</dt><dd>${v.contactEmail ? `<a href="mailto:${v.contactEmail}">${v.contactEmail}</a>` : '—'}</dd>
-          <dt>Part Number</dt><dd>${v.partNumber || '—'}</dd>
-          <dt>Price</dt><dd>${currency(v.price)}</dd>
-          <dt>Shipping</dt><dd>${currency(v.shippingCost)}</dd>
-          <dt>MOQ</dt><dd>${v.moq ?? '—'}</dd>
-          <dt>Lead Time</dt><dd>${v.leadTimeDays != null ? `${v.leadTimeDays} days` : '—'}</dd>
-          <dt>On-Time Score</dt><dd>${v.onTimeScore != null ? `${v.onTimeScore}%` : '—'}</dd>
-        </dl>
+
+    const itemId = item.id;
+    const prior = selectedVendorByItem[itemId] || {};
+    const primaryFromItem = item.primaryVendorId || vendorList[0].id;
+    const altDefault = vendorList.length > 1 ? vendorList[1].id : vendorList[0].id;
+    const altFromItem = item.altVendorId || altDefault;
+    const primaryId = prior.primary && vendorList.some(v => String(v.id) === String(prior.primary)) ? prior.primary : primaryFromItem;
+    const altId = prior.alt && vendorList.some(v => String(v.id) === String(prior.alt)) ? prior.alt : altFromItem;
+    selectedVendorByItem[itemId] = { primary: String(primaryId), alt: String(altId) };
+
+    const renderSlot = (slotKey, label, vendorId, optionPrefix) => {
+      const vendor = vendorList.find(v => String(v.id) === String(vendorId));
+      const option = vendorOptions.find(v => String(v.vendorId) === String(vendorId)) || {};
+      return `
+        <div class="vendorCard" style="margin-top:10px">
+          <div class="field" style="margin-bottom:8px">
+            <label for="${optionPrefix}Picker">${label}</label>
+            <select id="${optionPrefix}Picker">
+              ${vendorList.map(v => `<option value="${v.id}" ${String(v.id) === String(vendorId) ? 'selected' : ''}>${escapeHtml(v.company)}</option>`).join('')}
+            </select>
+          </div>
+          <dl class="vendorGrid" style="margin-bottom:10px">
+            <dt>Contact</dt><dd>${escapeHtml((vendor && vendor.contactName) || '-')}</dd>
+            <dt>Email</dt><dd>${vendor && vendor.contactEmail ? `<a href="mailto:${escapeHtml(vendor.contactEmail)}">${escapeHtml(vendor.contactEmail)}</a>` : '-'}</dd>
+            <dt>On-Time</dt><dd>${vendor && vendor.onTimeScore != null ? `${escapeHtml(vendor.onTimeScore)}%` : '-'}</dd>
+          </dl>
+          <div class="vendorGrid">
+            <label for="${optionPrefix}Part">Part Number</label><input id="${optionPrefix}Part" value="${escapeHtml(option.partNumber || '')}" />
+            <label for="${optionPrefix}Price">Price</label><input id="${optionPrefix}Price" type="number" step="0.01" value="${escapeHtml(option.price ?? '')}" />
+            <label for="${optionPrefix}Ship">Shipping</label><input id="${optionPrefix}Ship" type="number" step="0.01" value="${escapeHtml(option.shippingCost ?? '')}" />
+            <label for="${optionPrefix}Moq">MOQ</label><input id="${optionPrefix}Moq" type="number" step="1" value="${escapeHtml(option.moq ?? '')}" />
+          </div>
+          <div style="margin-top:10px"><button type="button" id="${optionPrefix}Save" class="btn" style="background:#0b5ed7;color:#fff">Save ${label}</button></div>
+        </div>
       `;
-      wrap.appendChild(card);
+    };
+
+    wrap.innerHTML = `
+      ${renderSlot('primary', 'Primary Vendor', primaryId, 'primary')}
+      ${renderSlot('alt', 'Alt Vendor', altId, 'alt')}
+    `;
+
+    const saveSlot = async (slotName, prefix) => {
+      const picker = wrap.querySelector(`#${prefix}Picker`);
+      const vendorId = picker.value;
+      const payload = {
+        partNumber: (wrap.querySelector(`#${prefix}Part`).value || '').trim() || null,
+        price: normalizeNumberInput(wrap.querySelector(`#${prefix}Price`).value),
+        shippingCost: normalizeNumberInput(wrap.querySelector(`#${prefix}Ship`).value),
+        moq: normalizeNumberInput(wrap.querySelector(`#${prefix}Moq`).value)
+      };
+      const itemPayload = slotName === 'primary'
+        ? { primaryVendorId: Number(vendorId) }
+        : { altVendorId: Number(vendorId) };
+      const itemRes = await fetch('/api/items/' + encodeURIComponent(itemId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(itemPayload)
+      });
+      if (!itemRes.ok) throw new Error('failed to save item vendor selection');
+      const optionRes = await fetch(`/api/items/${encodeURIComponent(itemId)}/vendor-options/${encodeURIComponent(vendorId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!optionRes.ok) throw new Error('failed to save item vendor values');
+    };
+
+    wrap.querySelector('#primaryPicker').addEventListener('change', (ev) => {
+      selectedVendorByItem[itemId].primary = ev.target.value;
+      renderVendors(item);
+    });
+    wrap.querySelector('#altPicker').addEventListener('change', (ev) => {
+      selectedVendorByItem[itemId].alt = ev.target.value;
+      renderVendors(item);
+    });
+    wrap.querySelector('#primarySave').addEventListener('click', async () => {
+      try { await saveSlot('primary', 'primary'); await show(); }
+      catch (err){ alert('Failed to save primary vendor: ' + (err.message || err)); }
+    });
+    wrap.querySelector('#altSave').addEventListener('click', async () => {
+      try { await saveSlot('alt', 'alt'); await show(); }
+      catch (err){ alert('Failed to save alt vendor: ' + (err.message || err)); }
     });
   }
 
-  // fetch events/history and draw COUNT session points across 12 months
   async function show(){
-    const id = el('item').value; if (!id) return;
+    const id = el('item').value;
+    if (!id) return;
+
     try {
       const itemRes = await fetch('/api/items/' + encodeURIComponent(id));
       if (itemRes.ok) {
         const item = await itemRes.json();
-        renderVendors(item.vendors || []);
+        renderVendors(item);
       } else {
-        renderVendors([]);
+        renderVendors({ id, vendors: [], vendorList: [] });
       }
     } catch (e) {
-      renderVendors([]);
+      renderVendors({ id, vendors: [], vendorList: [] });
     }
+
     const fromDate = parseDateInput(el('from').value, false);
     const toDate = parseDateInput(el('to').value, true);
     let events = [];
     try{
-      const qs = [];
-      if (el('from').value) qs.push('from='+encodeURIComponent(el('from').value));
-      if (el('to').value) qs.push('to='+encodeURIComponent(el('to').value));
-      const res = await fetch('/api/items/'+encodeURIComponent(id)+'/history'+(qs.length?('?'+qs.join('&')):''));
+      const parts = [];
+      if (el('from').value) parts.push('from=' + encodeURIComponent(el('from').value));
+      if (el('to').value) parts.push('to=' + encodeURIComponent(el('to').value));
+      const res = await fetch('/api/items/' + encodeURIComponent(id) + '/history' + (parts.length ? ('?' + parts.join('&')) : ''));
       if (!res.ok) throw new Error('history fetch failed ' + res.status);
       const json = await res.json();
       events = json.events || [];
@@ -121,30 +211,37 @@
     }catch(err){
       events = await getLocalHistory(id, fromDate, toDate);
     }
-    // extract COUNT session events and map
-    const countEvents = (events||[]).filter(e=>e.type==='COUNT').map(e=>({ ts: new Date(e.timestamp), qty: e.qty }));
+
+    const countEvents = (events || []).filter(e=>e.type === 'COUNT').map(e=>({ ts: new Date(e.timestamp), qty: e.qty }));
     const to = el('to').value ? new Date(el('to').value) : new Date();
-    const end = new Date(to.getFullYear(), to.getMonth(), 1, 23,59,59,999);
-    const start = new Date(end.getFullYear(), end.getMonth(), 1); start.setMonth(start.getMonth()-11);
+    const end = new Date(to.getFullYear(), to.getMonth(), 1, 23, 59, 59, 999);
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
+    start.setMonth(start.getMonth() - 11);
     const ptsFiltered = countEvents.filter(e => e.ts >= start && e.ts <= end).sort((a,b)=>a.ts - b.ts);
-    if (ptsFiltered.length === 0){ drawEmpty(); renderEvents(events||[]); return; }
+    if (ptsFiltered.length === 0){
+      drawEmpty();
+      renderEvents(events || []);
+      return;
+    }
     const pts = ptsFiltered.map(p=>({ date: p.ts.toISOString().slice(0,10), qty: p.qty, ts: p.ts }));
     drawCountSeries(pts, start, end);
-    renderEvents(events||[]);
+    renderEvents(events || []);
   }
+
   function renderEvents(events){
-    const out = el('events'); out.innerHTML='';
+    const out = el('events');
+    out.innerHTML='';
     events.forEach(e=>{
-      const d=document.createElement('div'); d.textContent = `${new Date(e.timestamp).toLocaleString()} • ${e.type} ${e.qty} ${e.note?('• '+e.note):''} ${e.sessionId?(' session:'+e.sessionId.slice(0,8)):''}`;
+      const d = document.createElement('div');
+      d.textContent = `${new Date(e.timestamp).toLocaleString()} | ${e.type} ${e.qty}${e.note ? (' | ' + e.note) : ''}${e.sessionId ? (' session:' + e.sessionId.slice(0,8)) : ''}`;
       out.appendChild(d);
     });
   }
 
-  // interactive canvas chart
   let canvas, tooltip;
   const DPR = window.devicePixelRatio || 1;
   function resizeCanvas(){
-    const wrap = document.getElementById('chartWrap');
+    const wrap = el('chartWrap');
     if (!canvas) return;
     const rect = wrap.getBoundingClientRect();
     canvas.width = Math.floor(rect.width * DPR);
@@ -163,7 +260,6 @@
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0,0,canvas.width,canvas.height);
     if (!series || series.length===0) return;
-    // draw bar chart per day, with reorder line if provided
     const pad = 40 * DPR;
     const w = canvas.width; const h = canvas.height;
     const areaW = w - pad*2; const areaH = h - pad*2;
@@ -171,12 +267,10 @@
     const minV = Math.min(...vals, 0); const maxV = Math.max(...vals, 1);
     const vRange = (maxV - minV) || 1;
     const barW = areaW / series.length * 0.8;
-    // grid lines
     ctx.strokeStyle = dark ? '#3a3a3a' : '#e6e6e6'; ctx.lineWidth = 1 * DPR;
     ctx.beginPath();
     for (let i=0;i<=4;i++){ const yy = pad + (i/4)*areaH; ctx.moveTo(pad, yy); ctx.lineTo(pad+areaW, yy); }
     ctx.stroke();
-    // draw bars
     series.forEach((s,i)=>{
       const x = pad + i * (areaW / series.length) + (areaW/series.length - barW)/2;
       const y = pad + (1 - (s.qty - minV)/vRange) * areaH;
@@ -184,50 +278,52 @@
       ctx.fillStyle = '#1976d2';
       ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(barW), Math.floor(bh));
     });
-    // draw x labels
     ctx.fillStyle = dark ? '#e0e0e0' : '#333'; ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign='center';
     series.forEach((s,i)=>{ const x = pad + i * (areaW / series.length) + (areaW/series.length)/2; ctx.fillText(s.date, x, h - pad/2); });
-    // if current item has reorderLevel stored in dataset, draw horizontal reorder line
     try{
-      const sel = document.getElementById('item'); const opt = sel && sel.options[sel.selectedIndex];
+      const sel = el('item'); const opt = sel && sel.options[sel.selectedIndex];
       const rl = opt && opt.dataset && opt.dataset.reorder ? parseFloat(opt.dataset.reorder) : null;
       if (rl !== null && !Number.isNaN(rl)){
         const y = pad + (1 - (rl - minV)/vRange) * areaH;
         ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2*DPR; ctx.setLineDash([6*DPR,4*DPR]);
         ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad+areaW, y); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#c62828'; ctx.font = `${11*DPR}px sans-serif`; ctx.textAlign='right'; ctx.fillText('Reorder: '+rl, pad+areaW-6*DPR, y - 6*DPR);
+        ctx.fillStyle = '#c62828'; ctx.font = `${11*DPR}px sans-serif`; ctx.textAlign='right'; ctx.fillText('Reorder: ' + rl, pad+areaW-6*DPR, y - 6*DPR);
       }
-    }catch(e){ /* ignore */ }
+    }catch(e){}
   }
 
-  // draw COUNT session points connected with line on a 12-month axis
   function drawCountSeries(points, start, end){
     lastSeries = points.map(p=>({ date: p.date, qty: p.qty, ts: p.ts }));
     resizeCanvas();
     const dark = document.body.getAttribute('data-theme') === 'dark';
-    const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
     if (!points || points.length===0) return;
     const pad = 40 * DPR; const w = canvas.width; const h = canvas.height; const areaW = w - pad*2; const areaH = h - pad*2;
     const vals = points.map(p=>p.qty); const minV = Math.min(...vals, 0); const maxV = Math.max(...vals, 1); const vRange = (maxV - minV) || 1;
-    // draw grid
-    ctx.strokeStyle = dark ? '#3a3a3a' : '#e6e6e6'; ctx.lineWidth = 1*DPR; ctx.beginPath(); for (let i=0;i<=4;i++){ const yy = pad + (i/4)*areaH; ctx.moveTo(pad, yy); ctx.lineTo(pad+areaW, yy); } ctx.stroke();
-    // map functions
+    ctx.strokeStyle = dark ? '#3a3a3a' : '#e6e6e6'; ctx.lineWidth = 1*DPR; ctx.beginPath();
+    for (let i=0;i<=4;i++){ const yy = pad + (i/4)*areaH; ctx.moveTo(pad, yy); ctx.lineTo(pad+areaW, yy); }
+    ctx.stroke();
     const mapX = (ts) => pad + ((ts.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * areaW;
     const mapY = (v) => pad + (1 - (v - minV)/vRange) * areaH;
-    // draw line connecting points
-    ctx.beginPath(); ctx.strokeStyle = '#1976d2'; ctx.lineWidth = 2*DPR; points.forEach((p,i)=>{ const x=mapX(p.ts); const y=mapY(p.qty); if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke();
-    // draw points
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1976d2'; points.forEach(p=>{ const x=mapX(p.ts); const y=mapY(p.qty); ctx.beginPath(); ctx.arc(x,y,4*DPR,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
-    // x axis months labels (12 months)
+    ctx.beginPath(); ctx.strokeStyle = '#1976d2'; ctx.lineWidth = 2*DPR;
+    points.forEach((p,i)=>{ const x=mapX(p.ts); const y=mapY(p.qty); if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+    ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1976d2';
+    points.forEach(p=>{ const x=mapX(p.ts); const y=mapY(p.qty); ctx.beginPath(); ctx.arc(x,y,4*DPR,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
     ctx.fillStyle = dark ? '#e0e0e0' : '#333'; ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign = 'center';
-    for (let m=0;m<12;m++){ const dt = new Date(start.getFullYear(), start.getMonth()+m, 1); const x = pad + ((dt.getTime() - start.getTime())/(end.getTime()-start.getTime()))*areaW; const label = dt.toLocaleString(undefined,{month:'short'}); ctx.fillText(label, x, h - pad/2); }
-    // draw reorder line if present
+    for (let m=0;m<12;m++){
+      const dt = new Date(start.getFullYear(), start.getMonth()+m, 1);
+      const x = pad + ((dt.getTime() - start.getTime())/(end.getTime()-start.getTime()))*areaW;
+      const label = dt.toLocaleString(undefined,{month:'short'});
+      ctx.fillText(label, x, h - pad/2);
+    }
     try{
-      const sel = document.getElementById('item'); const opt = sel && sel.options[sel.selectedIndex]; const rl = opt && opt.dataset && opt.dataset.reorder ? parseFloat(opt.dataset.reorder) : null;
+      const sel = el('item'); const opt = sel && sel.options[sel.selectedIndex]; const rl = opt && opt.dataset && opt.dataset.reorder ? parseFloat(opt.dataset.reorder) : null;
       if (rl !== null && !Number.isNaN(rl)){
         const y = mapY(rl);
         ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2*DPR; ctx.setLineDash([6*DPR,4*DPR]); ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad+areaW, y); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#c62828'; ctx.font = `${11*DPR}px sans-serif`; ctx.textAlign='right'; ctx.fillText('Reorder: '+rl, pad+areaW-6*DPR, y - 6*DPR);
+        ctx.fillStyle = '#c62828'; ctx.font = `${11*DPR}px sans-serif`; ctx.textAlign='right'; ctx.fillText('Reorder: ' + rl, pad+areaW-6*DPR, y - 6*DPR);
       }
     }catch(e){}
   }
@@ -244,63 +340,85 @@
 
   function posToNearest(evt){
     if (!lastSeries || lastSeries.length===0) return null;
-    const rect = canvas.getBoundingClientRect(); const x = (evt.clientX - rect.left) * DPR;
-    // compute nearest by x
-    const points = lastSeries.map((s,i)=>{ const d=new Date(s.date); return {i, x: (d.getTime()-new Date(lastSeries[0].date).getTime())/(new Date(lastSeries[lastSeries.length-1].date).getTime()-new Date(lastSeries[0].date).getTime()||1)} });
-    // map to canvas coords
+    const rect = canvas.getBoundingClientRect();
+    const x = (evt.clientX - rect.left) * DPR;
     const pad = 40 * DPR; const areaW = canvas.width - pad*2;
     let nearest = null; let nd = Infinity;
-    for (let i=0;i<lastSeries.length;i++){ const t = new Date(lastSeries[i].date).getTime(); const minT = new Date(lastSeries[0].date).getTime(); const maxT = new Date(lastSeries[lastSeries.length-1].date).getTime()||minT+1; const px = pad + ((t-minT)/(maxT-minT||1))*areaW; const d = Math.abs(px - x); if (d < nd){ nd = d; nearest = {i, px}; } }
+    for (let i=0;i<lastSeries.length;i++){
+      const t = new Date(lastSeries[i].date).getTime();
+      const minT = new Date(lastSeries[0].date).getTime();
+      const maxT = new Date(lastSeries[lastSeries.length-1].date).getTime() || minT + 1;
+      const px = pad + ((t-minT)/(maxT-minT || 1))*areaW;
+      const d = Math.abs(px - x);
+      if (d < nd){ nd = d; nearest = {i, px}; }
+    }
     return nearest;
   }
 
-  // attach events after DOM is ready
   function attachCanvasEvents(){
     if (!canvas) return;
     canvas.addEventListener('mousemove', (ev)=>{
-    const n = posToNearest(ev); if (!n) { tooltip.style.display='none'; return; }
-    const s = lastSeries[n.i]; if (!s) { tooltip.style.display='none'; return; }
-    tooltip.style.display='block'; tooltip.textContent = `${s.date}: ${s.qty}`;
-    const rect = canvas.getBoundingClientRect(); tooltip.style.left = (n.px / DPR) + 'px'; tooltip.style.top = '8px';
+      const n = posToNearest(ev); if (!n) { tooltip.style.display='none'; return; }
+      const s = lastSeries[n.i]; if (!s) { tooltip.style.display='none'; return; }
+      tooltip.style.display='block'; tooltip.textContent = `${s.date}: ${s.qty}`;
+      tooltip.style.left = (n.px / DPR) + 'px'; tooltip.style.top = '8px';
     });
     canvas.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; });
   }
 
-  // wire up page
   window.load = async function(){
     await loadItems();
     const params = qs();
     if (params.itemId){ el('item').value = params.itemId; }
-    // default date range: last 12 months
-    const today = new Date(); const start = new Date(today.getFullYear(), today.getMonth(), 1); start.setMonth(start.getMonth()-11);
-    el('to').value = formatDate(today); el('from').value = formatDate(start);
-    // populate reorder input for selected item
-    const sel = el('item'); const opt = sel && sel.options[sel.selectedIndex]; el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
-    // auto-load history for selected item
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    start.setMonth(start.getMonth()-11);
+    el('to').value = formatDate(today);
+    el('from').value = formatDate(start);
+    const sel = el('item');
+    const opt = sel && sel.options[sel.selectedIndex];
+    el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
     await show();
   };
-  // expose show to inline button
   window.show = show;
 
-  // initial init after DOM ready
-  window.addEventListener('DOMContentLoaded', ()=>{ canvas = el('chartCanvas'); tooltip = el('tooltip'); attachCanvasEvents(); window.load(); resizeCanvas();
+  window.addEventListener('DOMContentLoaded', ()=>{
+    canvas = el('chartCanvas');
+    tooltip = el('tooltip');
+    attachCanvasEvents();
+    window.load();
+    resizeCanvas();
     const saved = localStorage.getItem('invapp.theme');
     applyTheme(saved === 'dark' ? 'dark' : 'light');
     const themeBtn = themeToggle();
     if (themeBtn){ themeBtn.addEventListener('click', ()=>{ const cur = document.body.getAttribute('data-theme'); applyTheme(cur === 'dark' ? 'light' : 'dark'); }); }
-    // wire save reorder
-    const saveBtn = el('saveReorder'); if (saveBtn){ saveBtn.addEventListener('click', async ()=>{
-      const sel = el('item'); const id = sel.value; const val = el('reorderInput').value; if (!id) return alert('Select an item'); const n = parseInt(val,10); if (Number.isNaN(n)) return alert('Invalid number');
-      try{
-        const res = await fetch('/api/items/'+encodeURIComponent(id), { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ reorderLevel: n }) });
-        if (!res.ok) throw new Error('update failed '+res.status);
-        // update option dataset and redraw
-        sel.options[sel.selectedIndex].dataset.reorder = String(n);
-        alert('Reorder level saved');
-        await show();
-      }catch(e){ console.error(e); alert('Failed to save reorder: '+(e.message||e)); }
-    }); }
-    // populate reorder input when selection changes
-    const sel = el('item'); sel && sel.addEventListener('change', async ()=>{ const opt = sel.options[sel.selectedIndex]; el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : ''; await show(); });
+    const saveBtn = el('saveReorder');
+    if (saveBtn){
+      saveBtn.addEventListener('click', async ()=>{
+        const sel = el('item'); const id = sel.value; const val = el('reorderInput').value;
+        if (!id) return alert('Select an item');
+        const n = parseInt(val,10);
+        if (Number.isNaN(n)) return alert('Invalid number');
+        try{
+          const res = await fetch('/api/items/' + encodeURIComponent(id), {
+            method: 'PUT',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ reorderLevel: n })
+          });
+          if (!res.ok) throw new Error('update failed ' + res.status);
+          sel.options[sel.selectedIndex].dataset.reorder = String(n);
+          alert('Reorder level saved');
+          await show();
+        }catch(e){
+          alert('Failed to save reorder: ' + (e.message || e));
+        }
+      });
+    }
+    const sel = el('item');
+    sel && sel.addEventListener('change', async ()=>{
+      const opt = sel.options[sel.selectedIndex];
+      el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
+      await show();
+    });
   });
 })();

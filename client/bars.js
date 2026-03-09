@@ -202,13 +202,22 @@
       const px = (ev.clientX - r.left) * DPR;
       const py = (ev.clientY - r.top) * DPR;
       const hit = bars.find(b => px >= b.x && px <= (b.x + b.w) && py >= b.y && py <= (b.y + b.h));
-      if (!hit){ tooltip.style.display='none'; return; }
+      if (!hit){ tooltip.style.display='none'; canvas.style.cursor = 'default'; return; }
+      canvas.style.cursor = 'pointer';
       tooltip.style.display = 'block';
       tooltip.textContent = `${hit.item.label}: ${formatQty(hit.item.qty)}`;
       tooltip.style.left = `${(hit.x / DPR)}px`;
       tooltip.style.top = `8px`;
     };
-    canvas.onmouseleave = ()=>{ tooltip.style.display='none'; };
+    canvas.onmouseleave = ()=>{ tooltip.style.display='none'; canvas.style.cursor = 'default'; };
+    canvas.onclick = (ev) => {
+      const r = canvas.getBoundingClientRect();
+      const px = (ev.clientX - r.left) * DPR;
+      const py = (ev.clientY - r.top) * DPR;
+      const hit = bars.find(b => px >= b.x && px <= (b.x + b.w) && py >= b.y && py <= (b.y + b.h));
+      if (!hit || !hit.item || !hit.item.id) return;
+      window.location.href = `/history.html?itemId=${encodeURIComponent(hit.item.id)}`;
+    };
   }
 
   window.addEventListener('resize', ()=>{ if (lastGroups.length) renderCharts(lastGroups); });

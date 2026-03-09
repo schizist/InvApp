@@ -7,6 +7,8 @@ const APP_SHELL = [
   '/catalog.js',
   '/history.html',
   '/history.js',
+  '/vendors.html',
+  '/vendors.js',
   '/bars.html',
   '/bars.js',
   '/manifest.json'

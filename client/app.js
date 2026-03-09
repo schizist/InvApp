@@ -12,6 +12,7 @@
   const syncBtn = document.getElementById('syncBtn');
   const OCCASIONAL_SYNC_MS = 5 * 60 * 1000;
   let syncInFlight = null;
+  const categoryOpenState = {};
 
   function setStatus(s){
     const online = s === 'online' || s === 'syncing' || s === 'up to date';
@@ -56,6 +57,15 @@
       const bRank = bi === -1 ? Number.MAX_SAFE_INTEGER : bi;
       if (aRank !== bRank) return aRank - bRank;
       return a.localeCompare(b);
+    });
+  }
+
+  function snapshotCategoryOpenState(){
+    const sections = itemsEl ? itemsEl.querySelectorAll('.categoryGroup[data-category]') : [];
+    sections.forEach(section => {
+      const key = section.getAttribute('data-category');
+      if (!key) return;
+      categoryOpenState[key] = section.open;
     });
   }
 
@@ -241,6 +251,7 @@
   }
 
   function renderItems(items, summaryMap, queuedMap){
+    snapshotCategoryOpenState();
     itemsEl.innerHTML = '';
     const byCategory = {};
     (items || []).forEach(it => {
@@ -251,7 +262,11 @@
     sortCategories(Object.keys(byCategory)).forEach(category => {
       const section = document.createElement('details');
       section.className = 'categoryGroup';
-      section.open = true;
+      section.setAttribute('data-category', category);
+      section.open = Object.prototype.hasOwnProperty.call(categoryOpenState, category) ? categoryOpenState[category] : true;
+      section.addEventListener('toggle', () => {
+        categoryOpenState[category] = section.open;
+      });
       const summary = document.createElement('summary');
       summary.className = 'categoryTitle';
       const categoryLabel = CATEGORY_LABELS[category] || category;

@@ -15,21 +15,25 @@ function init() {
         reorderLevel INTEGER DEFAULT 0,
         reorderQty INTEGER,
         unit TEXT,
-        packSize INTEGER
+        packSize INTEGER,
+        primaryVendorId INTEGER,
+        altVendorId INTEGER
       )
     `);
 
-    // Ensure new columns exist on older DBs (add if missing)
-    db.all(`PRAGMA table_info(items)`, (err, cols) => {
-      if (err) return console.error('PRAGMA table_info failed', err);
-      const names = (cols || []).map(c => c.name);
-      const toAdd = [];
-      if (!names.includes('reorderLevel')) toAdd.push(`ALTER TABLE items ADD COLUMN reorderLevel INTEGER DEFAULT 0`);
-      if (!names.includes('reorderQty')) toAdd.push(`ALTER TABLE items ADD COLUMN reorderQty INTEGER`);
-      if (!names.includes('unit')) toAdd.push(`ALTER TABLE items ADD COLUMN unit TEXT`);
-      if (!names.includes('packSize')) toAdd.push(`ALTER TABLE items ADD COLUMN packSize INTEGER`);
-      toAdd.forEach(sql => {
-        db.run(sql, err2 => { if (err2) console.warn('Failed to add column:', err2.message); });
+    // Ensure new columns exist on older DBs (safe to run repeatedly).
+    [
+      `ALTER TABLE items ADD COLUMN reorderLevel INTEGER DEFAULT 0`,
+      `ALTER TABLE items ADD COLUMN reorderQty INTEGER`,
+      `ALTER TABLE items ADD COLUMN unit TEXT`,
+      `ALTER TABLE items ADD COLUMN packSize INTEGER`,
+      `ALTER TABLE items ADD COLUMN primaryVendorId INTEGER`,
+      `ALTER TABLE items ADD COLUMN altVendorId INTEGER`
+    ].forEach(sql => {
+      db.run(sql, err => {
+        if (err && !String(err.message || '').toLowerCase().includes('duplicate column name')) {
+          console.warn('Failed to add items column:', err.message);
+        }
       });
     });
 
@@ -61,6 +65,39 @@ function init() {
         onTimeScore REAL,
         updatedAt TEXT NOT NULL,
         UNIQUE(itemId, vendorCompany, partNumber)
+      )
+    `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS vendors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company TEXT NOT NULL UNIQUE,
+        contactName TEXT,
+        contactEmail TEXT,
+        onTimeScore REAL,
+        updatedAt TEXT NOT NULL
+      )
+    `);
+
+    db.run(`ALTER TABLE vendors ADD COLUMN onTimeScore REAL`, err => {
+      if (err && !String(err.message || '').toLowerCase().includes('duplicate column name')) {
+        console.warn('Failed to add vendors.onTimeScore:', err.message);
+      }
+    });
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS item_vendor_options (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        itemId TEXT NOT NULL,
+        vendorId INTEGER NOT NULL,
+        partNumber TEXT,
+        price REAL,
+        shippingCost REAL,
+        moq INTEGER,
+        leadTimeDays INTEGER,
+        onTimeScore REAL,
+        updatedAt TEXT NOT NULL,
+        UNIQUE(itemId, vendorId)
       )
     `);
 
@@ -121,42 +158,102 @@ function init() {
       });
     }
 
-    const vendorStmt = db.prepare(`
-      INSERT OR IGNORE INTO vendor_options (
-        itemId, vendorCompany, contactName, contactEmail, partNumber,
-        price, shippingCost, moq, leadTimeDays, onTimeScore, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
     const now = new Date().toISOString();
-    items.forEach(([itemId]) => {
-      vendorStmt.run(
-        itemId,
-        'Core Supply Co.',
-        'Jordan Rivera',
-        'jordan.rivera@coresupply.example',
-        `CS-${itemId.toUpperCase()}`,
-        100,
-        15,
-        1,
-        14,
-        96,
-        now
-      );
-      vendorStmt.run(
-        itemId,
-        'Alt Source Manufacturing',
-        'Sam Patel',
-        'sam.patel@altsource.example',
-        `ASM-${itemId.toUpperCase()}`,
-        108,
-        12,
-        1,
-        21,
-        91,
-        now
+    const baseVendors = [
+      { company: 'Core Supply Co.', contactName: 'Jordan Rivera', contactEmail: 'jordan.rivera@coresupply.example', onTimeScore: 96 },
+      { company: 'Alt Source Manufacturing', contactName: 'Sam Patel', contactEmail: 'sam.patel@altsource.example', onTimeScore: 91 }
+    ];
+
+    const vendorSeedStmt = db.prepare(`
+      INSERT OR IGNORE INTO vendors (company, contactName, contactEmail, updatedAt)
+      VALUES (?, ?, ?, ?)
+    `);
+    baseVendors.forEach(v => vendorSeedStmt.run(v.company, v.contactName, v.contactEmail, now));
+    vendorSeedStmt.finalize();
+
+    // Migrate legacy per-item vendor rows into the normalized model.
+    db.run(`
+      INSERT OR IGNORE INTO vendors (company, contactName, contactEmail, updatedAt)
+      SELECT vendorCompany, MAX(contactName), MAX(contactEmail), COALESCE(MAX(updatedAt), ?)
+      FROM vendor_options
+      GROUP BY vendorCompany
+    `, [now]);
+
+    // Backfill vendor-level on-time score when the column exists.
+    baseVendors.forEach(v => {
+      db.run(
+        `UPDATE vendors SET onTimeScore = COALESCE(onTimeScore, ?) WHERE company = ?`,
+        [v.onTimeScore, v.company],
+        err => { if (err) console.warn('Failed to set default vendor onTimeScore:', err.message); }
       );
     });
-    vendorStmt.finalize();
+    db.run(
+      `UPDATE vendors
+       SET onTimeScore = COALESCE(
+         onTimeScore,
+         (SELECT MAX(vo.onTimeScore) FROM vendor_options vo WHERE vo.vendorCompany = vendors.company)
+       )`,
+      err => { if (err) console.warn('Failed to backfill vendor onTimeScore from legacy options:', err.message); }
+    );
+
+    db.run(`
+      INSERT OR IGNORE INTO item_vendor_options (
+        itemId, vendorId, partNumber, price, shippingCost, moq, leadTimeDays, onTimeScore, updatedAt
+      )
+      SELECT
+        vo.itemId,
+        v.id,
+        vo.partNumber,
+        vo.price,
+        vo.shippingCost,
+        vo.moq,
+        vo.leadTimeDays,
+        vo.onTimeScore,
+        COALESCE(vo.updatedAt, ?)
+      FROM vendor_options vo
+      JOIN vendors v ON v.company = vo.vendorCompany
+    `, [now]);
+
+    // Ensure each item has a default option row for seeded vendors.
+    const optionSeedStmt = db.prepare(`
+      INSERT OR IGNORE INTO item_vendor_options (
+        itemId, vendorId, partNumber, price, shippingCost, moq, leadTimeDays, onTimeScore, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    db.all(`SELECT id, company FROM vendors ORDER BY id ASC`, (vendorErr, vendors) => {
+      if (vendorErr) return console.error('Failed to seed vendor options:', vendorErr);
+      const primaryDefaultId = vendors[0] ? vendors[0].id : null;
+      const altDefaultId = vendors[1] ? vendors[1].id : primaryDefaultId;
+      items.forEach(([itemId]) => {
+        vendors.forEach(vendor => {
+          const prefix = vendor.company === 'Core Supply Co.' ? 'CS' : 'ASM';
+          const defaults = vendor.company === 'Core Supply Co.'
+            ? { price: 100, shippingCost: 15, moq: 1, leadTimeDays: 14, onTimeScore: 96 }
+            : { price: 108, shippingCost: 12, moq: 1, leadTimeDays: 21, onTimeScore: 91 };
+          optionSeedStmt.run(
+            itemId,
+            vendor.id,
+            `${prefix}-${itemId.toUpperCase()}`,
+            defaults.price,
+            defaults.shippingCost,
+            defaults.moq,
+            defaults.leadTimeDays,
+            defaults.onTimeScore,
+            now
+          );
+        });
+        if (primaryDefaultId !== null) {
+          db.run(
+            `UPDATE items
+             SET primaryVendorId = COALESCE(primaryVendorId, ?),
+                 altVendorId = COALESCE(altVendorId, ?)
+             WHERE id = ?`,
+            [primaryDefaultId, altDefaultId, itemId]
+          );
+        }
+      });
+      optionSeedStmt.finalize();
+    });
   });
 }
 

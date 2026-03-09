@@ -52,11 +52,15 @@
     .vendorGrid{display:grid;grid-template-columns:auto 1fr;gap:4px 8px;font-size:0.9rem}
     .vendorGrid dt{font-weight:700;color:#334155}
     .vendorGrid dd{margin:0;word-break:break-word}
+    .vendorGrid label{font-weight:700;color:#334155}
+    .vendorGrid input{height:30px;border:1px solid #cbd5e1;border-radius:6px;padding:0 8px;background:#fff;color:#111}
     .vendorEmpty{color:var(--muted)}
     .eventsTitle{font-size:0.95rem;font-weight:700;margin:4px 0 8px 0;color:#334155}
     body[data-theme="dark"] .field label{color:#cbd5e1}
     body[data-theme="dark"] .field select,
     body[data-theme="dark"] .field input{background:#0b0d10;color:#e5e7eb;border-color:#3a3f46}
+    body[data-theme="dark"] .vendorGrid label{color:#cbd5e1}
+    body[data-theme="dark"] .vendorGrid input{background:#0b0d10;color:#e5e7eb;border-color:#3a3f46}
     body[data-theme="dark"] #tooltip{background:#fff;color:#000}
   </style>
   <script src="/idb.js"></script>
@@ -80,6 +84,7 @@
     </div>
     <div class="topActions">
       <a href="/" class="btn btnSecondary">Home</a>
+      <a href="/vendors.html" class="btn btnSecondary">Vendors</a>
       <button id="themeToggle" class="btn btnNeutral">Dark</button>
     </div>
   </div>
@@ -108,7 +113,6 @@
 
   <div id="chartWrap"><canvas id="chartCanvas"></canvas><div id="tooltip"></div></div>
   <div class="vendorPanel">
-    <div class="eventsTitle">Vendor options</div>
     <div id="vendors" class="vendorList">
       <div class="vendorEmpty">No vendor options found for this item.</div>
     </div>
