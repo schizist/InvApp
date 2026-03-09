@@ -4,4 +4,4 @@ Generate reorder report when item reaches reorder threshold. Includes vendor inf
 
 Email reorder report to me
 
-Collasable categories automatically expand when I interact with the app even while connected to same network. 
+Make app start on computer boot

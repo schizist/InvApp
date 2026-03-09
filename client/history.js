@@ -91,6 +91,32 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function buildDailyLevelSeries(events, startDate, endDate){
+    const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 0, 0, 0, 0);
+    const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+    const sorted = (events || []).slice().sort((a,b)=> (a.timestamp || '').localeCompare(b.timestamp || ''));
+    let qty = 0;
+    let idx = 0;
+    const out = [];
+    for (let d = new Date(start); d <= end; d = new Date(d.getTime() + 24 * 60 * 60 * 1000)){
+      const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
+      while (idx < sorted.length){
+        const ev = sorted[idx];
+        const ts = new Date(ev.timestamp).getTime();
+        if (Number.isNaN(ts) || ts > dayEnd) break;
+        if (ev.type === 'COUNT') qty = Number(ev.qty) || 0;
+        else if (ev.type === 'DELTA') qty += (Number(ev.qty) || 0);
+        idx++;
+      }
+      out.push({
+        date: new Date(d).toISOString().slice(0,10),
+        qty,
+        ts: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0)
+      });
+    }
+    return out;
+  }
+
   function renderVendors(item){
     const wrap = el('vendors');
     if (!wrap) return;
@@ -211,6 +237,7 @@
     const fromDate = parseDateInput(el('from').value, false);
     const toDate = parseDateInput(el('to').value, true);
     let events = [];
+    let serverSeries = [];
     try{
       const parts = [];
       if (el('from').value) parts.push('from=' + encodeURIComponent(el('from').value));
@@ -219,24 +246,36 @@
       if (!res.ok) throw new Error('history fetch failed ' + res.status);
       const json = await res.json();
       events = json.events || [];
+      serverSeries = json.series || [];
       if (events.length) await IDB.storeRemoteEvents(events);
     }catch(err){
       events = await getLocalHistory(id, fromDate, toDate);
     }
 
-    const countEvents = (events || []).filter(e=>e.type === 'COUNT').map(e=>({ ts: new Date(e.timestamp), qty: e.qty }));
-    const to = el('to').value ? new Date(el('to').value) : new Date();
-    const end = new Date(to.getFullYear(), to.getMonth(), 1, 23, 59, 59, 999);
-    const start = new Date(end.getFullYear(), end.getMonth(), 1);
-    start.setMonth(start.getMonth() - 11);
-    const ptsFiltered = countEvents.filter(e => e.ts >= start && e.ts <= end).sort((a,b)=>a.ts - b.ts);
-    if (ptsFiltered.length === 0){
+    const to = toDate || new Date();
+    const end = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+    const from = fromDate || (() => {
+      const s = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      s.setMonth(s.getMonth() - 11);
+      return s;
+    })();
+    const start = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0, 0);
+
+    const points = (serverSeries && serverSeries.length > 0)
+      ? serverSeries.map(s => ({
+          date: s.date,
+          qty: Number(s.qty) || 0,
+          ts: new Date(`${s.date}T12:00:00`)
+        }))
+      : buildDailyLevelSeries(events, start, end);
+
+    if (!points || points.length === 0){
       drawEmpty();
       renderEvents(events || []);
       return;
     }
-    const pts = ptsFiltered.map(p=>({ date: p.ts.toISOString().slice(0,10), qty: p.qty, ts: p.ts }));
-    drawCountSeries(pts, start, end);
+
+    drawCountSeries(points, start, end);
     renderEvents(events || []);
   }
 
