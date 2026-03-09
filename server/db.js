@@ -77,7 +77,6 @@ function init() {
       ["mold_159","M-159","mold"],
       ["mold_161","M-161","mold"],
       ["mold_161-16","M-161-16","mold"],
-      ["mold_161-20","M-161-20","mold"],
       ["mold_161-24","M-161-24","mold"],
       // Wire
       ["wire_10","#10 Wire","wire"],

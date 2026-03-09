@@ -3,6 +3,16 @@
   const themeToggle = document.getElementById('themeToggle');
   const DPR = window.devicePixelRatio || 1;
   let lastGroups = [];
+  const CATEGORY_ORDER = ['mold', 'wire', 'shot', 'cap', 'enclosure', 'anode', 'refcell'];
+  const CATEGORY_LABELS = {
+    mold: 'Molds',
+    wire: 'Wire',
+    shot: 'Shots',
+    cap: 'Caps',
+    enclosure: 'Enclosures',
+    anode: 'Anodes',
+    refcell: 'Ref Cell'
+  };
 
   function applyTheme(t){
     const next = t === 'dark' ? 'dark' : 'light';
@@ -19,7 +29,16 @@
       out[key] = out[key] || [];
       out[key].push(it);
     });
-    return Object.keys(out).sort((a,b)=>a.localeCompare(b)).map(key => ({ category: key, items: out[key] }));
+    return Object.keys(out)
+      .sort((a,b) => {
+        const ai = CATEGORY_ORDER.indexOf(a);
+        const bi = CATEGORY_ORDER.indexOf(b);
+        const aRank = ai === -1 ? Number.MAX_SAFE_INTEGER : ai;
+        const bRank = bi === -1 ? Number.MAX_SAFE_INTEGER : bi;
+        if (aRank !== bRank) return aRank - bRank;
+        return a.localeCompare(b);
+      })
+      .map(key => ({ category: key, categoryLabel: CATEGORY_LABELS[key] || key, items: out[key] }));
   }
 
   async function load(){
@@ -75,7 +94,7 @@
       const details = document.createElement('details');
       details.className = 'categoryChart';
       details.open = true;
-      details.innerHTML = `<summary>${group.category.toUpperCase()} (${group.items.length})</summary><div class="chartWrap"><canvas></canvas><div class="tooltip"></div></div>`;
+      details.innerHTML = `<summary>${group.categoryLabel} (${group.items.length})</summary><div class="chartWrap"><canvas></canvas><div class="tooltip"></div></div>`;
       chartsEl.appendChild(details);
       drawBars(details.querySelector('canvas'), details.querySelector('.tooltip'), group.items);
     });

@@ -37,6 +37,28 @@
     }
   }
 
+  const CATEGORY_ORDER = ['mold', 'wire', 'shot', 'cap', 'enclosure', 'anode', 'refcell'];
+  const CATEGORY_LABELS = {
+    mold: 'Molds',
+    wire: 'Wire',
+    shot: 'Shots',
+    cap: 'Caps',
+    enclosure: 'Enclosures',
+    anode: 'Anodes',
+    refcell: 'Ref Cell'
+  };
+
+  function sortCategories(keys){
+    return keys.slice().sort((a, b) => {
+      const ai = CATEGORY_ORDER.indexOf(a);
+      const bi = CATEGORY_ORDER.indexOf(b);
+      const aRank = ai === -1 ? Number.MAX_SAFE_INTEGER : ai;
+      const bRank = bi === -1 ? Number.MAX_SAFE_INTEGER : bi;
+      if (aRank !== bRank) return aRank - bRank;
+      return a.localeCompare(b);
+    });
+  }
+
   function getBundledItems(){
     return Array.isArray(window.INVAPP_DEFAULT_ITEMS) ? window.INVAPP_DEFAULT_ITEMS : [];
   }
@@ -226,13 +248,14 @@
       byCategory[key] = byCategory[key] || [];
       byCategory[key].push(it);
     });
-    Object.keys(byCategory).sort((a,b)=>a.localeCompare(b)).forEach(category => {
+    sortCategories(Object.keys(byCategory)).forEach(category => {
       const section = document.createElement('details');
       section.className = 'categoryGroup';
       section.open = true;
       const summary = document.createElement('summary');
       summary.className = 'categoryTitle';
-      summary.textContent = `${category.toUpperCase()} (${byCategory[category].length})`;
+      const categoryLabel = CATEGORY_LABELS[category] || category;
+      summary.textContent = `${categoryLabel} (${byCategory[category].length})`;
       section.appendChild(summary);
 
       const body = document.createElement('div');
