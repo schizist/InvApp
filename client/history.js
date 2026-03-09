@@ -62,6 +62,18 @@
 
   function formatDate(d){ return d.toISOString().slice(0,10); }
 
+  function moveItemSelection(direction){
+    const sel = el('item');
+    if (!sel || sel.options.length === 0) return;
+    const current = sel.selectedIndex >= 0 ? sel.selectedIndex : 0;
+    const next = current + direction;
+    if (next < 0 || next >= sel.options.length) return;
+    sel.selectedIndex = next;
+    const opt = sel.options[sel.selectedIndex];
+    el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
+    show();
+  }
+
   function escapeHtml(text){
     return String(text == null ? '' : text)
       .replace(/&/g, '&amp;')
@@ -420,5 +432,9 @@
       el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
       await show();
     });
+    const prevBtn = el('prevItemBtn');
+    const nextBtn = el('nextItemBtn');
+    if (prevBtn) prevBtn.addEventListener('click', ()=> moveItemSelection(-1));
+    if (nextBtn) nextBtn.addEventListener('click', ()=> moveItemSelection(1));
   });
 })();
