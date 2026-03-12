@@ -10,6 +10,8 @@
   const itemsEl = document.getElementById('items');
   const queuedEl = document.getElementById('queued');
   const syncBtn = document.getElementById('syncBtn');
+  const dbSelectEl = document.getElementById('dbSelect');
+  const createDbBtnEl = document.getElementById('createDbBtn');
   const OCCASIONAL_SYNC_MS = 5 * 60 * 1000;
   let syncInFlight = null;
   const categoryOpenState = {};
@@ -433,10 +435,86 @@
     }
   }
 
+  async function loadDatabases(){
+    if (!dbSelectEl) return;
+    try{
+      const res = await fetch('/api/databases');
+      if (!res.ok) throw new Error('database list failed');
+      const json = await res.json();
+      const current = json.current;
+      const list = Array.isArray(json.databases) ? json.databases : [];
+      dbSelectEl.innerHTML = '';
+      list.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (name === current) opt.selected = true;
+        dbSelectEl.appendChild(opt);
+      });
+    }catch(err){
+      console.warn('Failed to load databases', err);
+    }
+  }
+
+  async function switchDatabase(name){
+    const res = await fetch('/api/databases/current', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    if (!res.ok) throw new Error('database switch failed');
+    await IDB.resetAll();
+    await loadDatabases();
+    await refreshAll();
+    await refreshQueued();
+    if (navigator.onLine) syncOnce().catch(() => {});
+  }
+
+  async function createDatabase(){
+    const name = prompt('Enter new database name');
+    if (name === null) return;
+    const trimmed = String(name).trim();
+    if (!trimmed) return alert('Database name is required.');
+    const res = await fetch('/api/databases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: trimmed })
+    });
+    if (!res.ok){
+      const msg = await res.text();
+      throw new Error(msg || 'database create failed');
+    }
+    await IDB.resetAll();
+    await loadDatabases();
+    await refreshAll();
+    await refreshQueued();
+  }
+
   // manual sync button
   syncBtn.addEventListener('click', async ()=>{
     await syncOnce();
   });
+
+  if (dbSelectEl){
+    dbSelectEl.addEventListener('change', async ()=>{
+      const next = dbSelectEl.value;
+      try{
+        await switchDatabase(next);
+      }catch(err){
+        alert('Failed to switch database: ' + (err.message || err));
+        await loadDatabases();
+      }
+    });
+  }
+  if (createDbBtnEl){
+    createDbBtnEl.addEventListener('click', async ()=>{
+      try{
+        await createDatabase();
+      }catch(err){
+        alert('Failed to create database: ' + (err.message || err));
+      }
+    });
+  }
 
   // ensure navigation is never gated by online state
   const barsLink = document.getElementById('barsLink');
@@ -452,6 +530,7 @@
 
   // initial
   setStatus(navigator.onLine ? 'online' : 'offline');
+  await loadDatabases();
   await refreshAll();
   await refreshQueued();
   if (navigator.onLine) syncOnce().catch(err => console.warn('initial sync failed', err));

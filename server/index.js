@@ -3,7 +3,14 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
 
-const { db, init } = require('./db');
+const {
+  db,
+  init,
+  listDatabases,
+  getCurrentDatabaseName,
+  switchDatabase,
+  createDatabase
+} = require('./db');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -21,6 +28,46 @@ app.use((req, res, next) => {
 
 // Serve client static files
 app.use('/', express.static(path.join(__dirname, '..', 'client')));
+
+// List databases and current selection
+app.get('/api/databases', (_req, res) => {
+  try{
+    res.json({
+      current: getCurrentDatabaseName(),
+      databases: listDatabases()
+    });
+  }catch(err){
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create and switch to a new database
+app.post('/api/databases', (req, res) => {
+  try{
+    const name = (req.body && req.body.name) ? String(req.body.name) : '';
+    const current = createDatabase(name);
+    res.status(201).json({
+      current,
+      databases: listDatabases()
+    });
+  }catch(err){
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Switch active database
+app.put('/api/databases/current', (req, res) => {
+  try{
+    const name = (req.body && req.body.name) ? String(req.body.name) : '';
+    const current = switchDatabase(name);
+    res.json({
+      current,
+      databases: listDatabases()
+    });
+  }catch(err){
+    res.status(400).json({ error: err.message });
+  }
+});
 
 // GET items
 app.get('/api/items', (req, res) => {

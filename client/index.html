@@ -41,6 +41,7 @@
     .btnPrimary{background:var(--primary);color:#fff}
     .btnSecondary{background:var(--secondary);color:var(--link)}
     .btnNeutral{background:var(--panel);color:var(--link);border-color:var(--border)}
+    .dbSelect{height:40px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg);font-weight:600}
     #statusPill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:0.85rem;font-weight:700;margin-left:4px}
     #statusPill.online{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7}
     #statusPill.offline{background:#ffebee;color:#b71c1c;border:1px solid #ef9a9a}
@@ -94,6 +95,8 @@
     </div>
     <div class="topActions">
       <button id="syncBtn" class="btn btnPrimary">Sync</button>
+      <select id="dbSelect" class="dbSelect" aria-label="Select database"></select>
+      <button id="createDbBtn" class="btn btnNeutral" type="button">New DB</button>
       <a id="barsLink" class="btn btnSecondary" href="/bars.html">Stock</a>
       <a id="historyLink" class="btn btnSecondary" href="/history.html">Details</a>
       <a id="vendorsLink" class="btn btnSecondary" href="/vendors.html">Vendors</a>
