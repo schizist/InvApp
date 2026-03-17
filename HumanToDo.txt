@@ -1,7 +1,9 @@
-Add selector for different databases with option to create new databases
-
 Generate reorder report when item reaches reorder threshold. Includes vendor info and graph of supply levels. 
 
 Email reorder report to me
 
-Make app start on computer boot
+add inventory items: the construction folder should have a list of T&B hardware we use according to Alan. 
+    c-taps
+    crimps
+    shunts
+    tape
