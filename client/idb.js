@@ -109,6 +109,18 @@
     });
   }
 
+  async function resetAll() {
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(['events', 'remoteEvents', 'meta'], 'readwrite');
+      tx.objectStore('events').clear();
+      tx.objectStore('remoteEvents').clear();
+      tx.objectStore('meta').clear();
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
   global.IDB = {
     addEvent,
     getQueued,
@@ -122,6 +134,7 @@
     setLastItems,
     getLastItems,
     setLastSyncTime,
-    getLastSyncTime
+    getLastSyncTime,
+    resetAll
   };
 })(window);

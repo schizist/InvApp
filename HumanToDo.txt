@@ -1,7 +1,15 @@
-Add selector for different databases with option to create new databases
-
 Generate reorder report when item reaches reorder threshold. Includes vendor info and graph of supply levels. 
 
 Email reorder report to me
 
-Collasable categories automatically expand when I interact with the app even while connected to same network. 
+Add minor section that is collapsed by default, it will have less common things so DB can be complete
+
+Input orders, and show pending orders on items. 
+
+add inventory items: the construction folder should have a list of T&B hardware we use according to Alan. 
+    c-taps
+    crimps
+    shunts
+    tape
+    SRE-002 ref cell
+    SRE-007 ref cell

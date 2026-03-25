@@ -10,6 +10,11 @@
   const itemsEl = document.getElementById('items');
   const queuedEl = document.getElementById('queued');
   const syncBtn = document.getElementById('syncBtn');
+  const dbSelectEl = document.getElementById('dbSelect');
+  const createDbBtnEl = document.getElementById('createDbBtn');
+  const OCCASIONAL_SYNC_MS = 5 * 60 * 1000;
+  let syncInFlight = null;
+  const categoryOpenState = {};
 
   function setStatus(s){
     const online = s === 'online' || s === 'syncing' || s === 'up to date';
@@ -35,6 +40,41 @@
     }
   }
 
+  const CATEGORY_ORDER = ['mold', 'wire', 'shot', 'cap', 'enclosure', 'anode', 'refcell'];
+  const CATEGORY_LABELS = {
+    mold: 'Molds',
+    wire: 'Wire',
+    shot: 'Shots',
+    cap: 'Caps',
+    enclosure: 'Enclosures',
+    anode: 'Anodes',
+    refcell: 'Ref Cell'
+  };
+
+  function sortCategories(keys){
+    return keys.slice().sort((a, b) => {
+      const ai = CATEGORY_ORDER.indexOf(a);
+      const bi = CATEGORY_ORDER.indexOf(b);
+      const aRank = ai === -1 ? Number.MAX_SAFE_INTEGER : ai;
+      const bRank = bi === -1 ? Number.MAX_SAFE_INTEGER : bi;
+      if (aRank !== bRank) return aRank - bRank;
+      return a.localeCompare(b);
+    });
+  }
+
+  function snapshotCategoryOpenState(){
+    const sections = itemsEl ? itemsEl.querySelectorAll('.categoryGroup[data-category]') : [];
+    sections.forEach(section => {
+      const key = section.getAttribute('data-category');
+      if (!key) return;
+      categoryOpenState[key] = section.open;
+    });
+  }
+
+  function getBundledItems(){
+    return Array.isArray(window.INVAPP_DEFAULT_ITEMS) ? window.INVAPP_DEFAULT_ITEMS : [];
+  }
+
   async function fetchItems(){
     try{
       const res = await fetch('/api/items');
@@ -46,7 +86,7 @@
       setStatus('offline');
       const localItems = await IDB.getLastItems();
       if (localItems && localItems.length) return localItems;
-      throw e;
+      return getBundledItems();
     }
   }
 
@@ -213,6 +253,7 @@
   }
 
   function renderItems(items, summaryMap, queuedMap){
+    snapshotCategoryOpenState();
     itemsEl.innerHTML = '';
     const byCategory = {};
     (items || []).forEach(it => {
@@ -220,13 +261,18 @@
       byCategory[key] = byCategory[key] || [];
       byCategory[key].push(it);
     });
-    Object.keys(byCategory).sort((a,b)=>a.localeCompare(b)).forEach(category => {
+    sortCategories(Object.keys(byCategory)).forEach(category => {
       const section = document.createElement('details');
       section.className = 'categoryGroup';
-      section.open = true;
+      section.setAttribute('data-category', category);
+      section.open = Object.prototype.hasOwnProperty.call(categoryOpenState, category) ? categoryOpenState[category] : true;
+      section.addEventListener('toggle', () => {
+        categoryOpenState[category] = section.open;
+      });
       const summary = document.createElement('summary');
       summary.className = 'categoryTitle';
-      summary.textContent = `${category.toUpperCase()} (${byCategory[category].length})`;
+      const categoryLabel = CATEGORY_LABELS[category] || category;
+      summary.textContent = `${categoryLabel} (${byCategory[category].length})`;
       section.appendChild(summary);
 
       const body = document.createElement('div');
@@ -316,6 +362,8 @@
   }
 
   async function syncOnce(){
+    if (syncInFlight) return syncInFlight;
+    syncInFlight = (async () => {
     if (!navigator.onLine){
       setStatus('offline');
       await refreshQueued();
@@ -331,7 +379,7 @@
       }catch(e){
         console.error('Upload failed after retries', e);
         setStatus('sync failed (upload)');
-        try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
+        try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync'; } catch(e){}
         return;
       }
 
@@ -346,16 +394,25 @@
 
       setStatus('up to date');
       await refreshAll();
-      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
+      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync'; } catch(e){}
     }catch(e){
       console.error(e); setStatus('sync failed');
-      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync Now'; } catch(e){}
+      try { syncBtn.disabled = false; syncBtn.classList.remove('loading'); syncBtn.textContent = 'Sync'; } catch(e){}
+    }
+    })();
+    try{
+      await syncInFlight;
+    }finally{
+      syncInFlight = null;
     }
   }
 
   async function queueEvent(ev){
     await IDB.addEvent(ev);
     await renderLocalView();
+    if (navigator.onLine){
+      syncOnce().catch(err => console.warn('post-save sync failed', err));
+    }
   }
 
   async function refreshAll(){
@@ -378,10 +435,86 @@
     }
   }
 
+  async function loadDatabases(){
+    if (!dbSelectEl) return;
+    try{
+      const res = await fetch('/api/databases');
+      if (!res.ok) throw new Error('database list failed');
+      const json = await res.json();
+      const current = json.current;
+      const list = Array.isArray(json.databases) ? json.databases : [];
+      dbSelectEl.innerHTML = '';
+      list.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (name === current) opt.selected = true;
+        dbSelectEl.appendChild(opt);
+      });
+    }catch(err){
+      console.warn('Failed to load databases', err);
+    }
+  }
+
+  async function switchDatabase(name){
+    const res = await fetch('/api/databases/current', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    if (!res.ok) throw new Error('database switch failed');
+    await IDB.resetAll();
+    await loadDatabases();
+    await refreshAll();
+    await refreshQueued();
+    if (navigator.onLine) syncOnce().catch(() => {});
+  }
+
+  async function createDatabase(){
+    const name = prompt('Enter new database name');
+    if (name === null) return;
+    const trimmed = String(name).trim();
+    if (!trimmed) return alert('Database name is required.');
+    const res = await fetch('/api/databases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: trimmed })
+    });
+    if (!res.ok){
+      const msg = await res.text();
+      throw new Error(msg || 'database create failed');
+    }
+    await IDB.resetAll();
+    await loadDatabases();
+    await refreshAll();
+    await refreshQueued();
+  }
+
   // manual sync button
   syncBtn.addEventListener('click', async ()=>{
     await syncOnce();
   });
+
+  if (dbSelectEl){
+    dbSelectEl.addEventListener('change', async ()=>{
+      const next = dbSelectEl.value;
+      try{
+        await switchDatabase(next);
+      }catch(err){
+        alert('Failed to switch database: ' + (err.message || err));
+        await loadDatabases();
+      }
+    });
+  }
+  if (createDbBtnEl){
+    createDbBtnEl.addEventListener('click', async ()=>{
+      try{
+        await createDatabase();
+      }catch(err){
+        alert('Failed to create database: ' + (err.message || err));
+      }
+    });
+  }
 
   // ensure navigation is never gated by online state
   const barsLink = document.getElementById('barsLink');
@@ -392,13 +525,15 @@
   window.addEventListener('online', ()=>{ setStatus('online'); syncOnce(); });
   window.addEventListener('offline', ()=>{ setStatus('offline'); refreshQueued(); });
 
-  // periodic background sync (attempt every 30s when online)
-  setInterval(() => { if (navigator.onLine) syncOnce(); }, 30000);
+  // occasional background retry while app remains open
+  setInterval(() => { if (navigator.onLine) syncOnce(); }, OCCASIONAL_SYNC_MS);
 
   // initial
   setStatus(navigator.onLine ? 'online' : 'offline');
+  await loadDatabases();
   await refreshAll();
   await refreshQueued();
+  if (navigator.onLine) syncOnce().catch(err => console.warn('initial sync failed', err));
   // theme: apply persisted theme and wire toggle
   (function(){
     const toggle = document.getElementById('themeToggle');
