@@ -2,8 +2,14 @@ Generate reorder report when item reaches reorder threshold. Includes vendor inf
 
 Email reorder report to me
 
+Add minor section that is collapsed by default, it will have less common things so DB can be complete
+
+Input orders, and show pending orders on items. 
+
 add inventory items: the construction folder should have a list of T&B hardware we use according to Alan. 
     c-taps
     crimps
     shunts
     tape
+    SRE-002 ref cell
+    SRE-007 ref cell
