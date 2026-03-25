@@ -3,7 +3,14 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
 
-const { db, init } = require('./db');
+const {
+  db,
+  init,
+  listDatabases,
+  getCurrentDatabaseName,
+  switchDatabase,
+  createDatabase
+} = require('./db');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -22,9 +29,49 @@ app.use((req, res, next) => {
 // Serve client static files
 app.use('/', express.static(path.join(__dirname, '..', 'client')));
 
+// List databases and current selection
+app.get('/api/databases', (_req, res) => {
+  try{
+    res.json({
+      current: getCurrentDatabaseName(),
+      databases: listDatabases()
+    });
+  }catch(err){
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create and switch to a new database
+app.post('/api/databases', (req, res) => {
+  try{
+    const name = (req.body && req.body.name) ? String(req.body.name) : '';
+    const current = createDatabase(name);
+    res.status(201).json({
+      current,
+      databases: listDatabases()
+    });
+  }catch(err){
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Switch active database
+app.put('/api/databases/current', (req, res) => {
+  try{
+    const name = (req.body && req.body.name) ? String(req.body.name) : '';
+    const current = switchDatabase(name);
+    res.json({
+      current,
+      databases: listDatabases()
+    });
+  }catch(err){
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // GET items
 app.get('/api/items', (req, res) => {
-  db.all(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize FROM items ORDER BY label`, (err, rows) => {
+  db.all(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,primaryVendorId,altVendorId FROM items ORDER BY label`, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     // compute summary and merge
     db.all(`SELECT * FROM events ORDER BY timestamp ASC`, (err2, events) => {
@@ -129,37 +176,208 @@ app.get('/api/items/:id/history', (req, res) => {
 // GET single item
 app.get('/api/items/:id', (req, res) => {
   const id = req.params.id;
-  db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize FROM items WHERE id = ?`, [id], (err, row) => {
+  db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,primaryVendorId,altVendorId FROM items WHERE id = ?`, [id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'not found' });
     db.all(
-      `SELECT id,itemId,vendorCompany,contactName,contactEmail,partNumber,price,shippingCost,moq,leadTimeDays,onTimeScore,updatedAt
-       FROM vendor_options WHERE itemId = ? ORDER BY onTimeScore DESC, price ASC`,
+      `SELECT id,company,contactName,contactEmail,onTimeScore,updatedAt
+       FROM vendors
+       ORDER BY company ASC`,
+      [],
+      (vendorListErr, vendorList) => {
+        if (vendorListErr) return res.status(500).json({ error: vendorListErr.message });
+        db.all(
+      `SELECT
+         ivo.id,
+         ivo.itemId,
+         ivo.vendorId,
+         v.company AS vendorCompany,
+         v.contactName,
+         v.contactEmail,
+         ivo.partNumber,
+         ivo.price,
+         ivo.shippingCost,
+         ivo.moq,
+         ivo.leadTimeDays,
+         ivo.onTimeScore,
+         ivo.updatedAt
+       FROM item_vendor_options ivo
+       JOIN vendors v ON v.id = ivo.vendorId
+       WHERE ivo.itemId = ?
+       ORDER BY v.company ASC`,
       [id],
-      (vendorErr, vendors) => {
-        if (vendorErr) return res.status(500).json({ error: vendorErr.message });
-        res.json(Object.assign({}, row, { vendors: vendors || [] }));
+      (vendorOptionsErr, vendorOptions) => {
+        if (vendorOptionsErr) return res.status(500).json({ error: vendorOptionsErr.message });
+        res.json(Object.assign({}, row, { vendors: vendorOptions || [], vendorList: vendorList || [] }));
+      }
+    );
       }
     );
   });
 });
 
+// Get all vendors
+app.get('/api/vendors', (req, res) => {
+  db.all(
+    `SELECT id,company,contactName,contactEmail,onTimeScore,updatedAt FROM vendors ORDER BY company ASC`,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows || []);
+    }
+  );
+});
+
+// Create vendor
+app.post('/api/vendors', (req, res) => {
+  const body = req.body || {};
+  const company = (body.company || '').trim();
+  if (!company) return res.status(400).json({ error: 'company is required' });
+  const now = new Date().toISOString();
+  db.run(
+    `INSERT INTO vendors (company, contactName, contactEmail, onTimeScore, updatedAt) VALUES (?, ?, ?, ?, ?)`,
+    [company, body.contactName || null, body.contactEmail || null, (body.onTimeScore === null || body.onTimeScore === '' || typeof body.onTimeScore === 'undefined') ? null : Number(body.onTimeScore), now],
+    function(err){
+      if (err) return res.status(500).json({ error: err.message });
+      db.get(
+        `SELECT id,company,contactName,contactEmail,onTimeScore,updatedAt FROM vendors WHERE id = ?`,
+        [this.lastID],
+        (readErr, row) => {
+          if (readErr) return res.status(500).json({ error: readErr.message });
+          res.status(201).json(row);
+        }
+      );
+    }
+  );
+});
+
+// Update vendor fields (partial)
+app.put('/api/vendors/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid vendor id' });
+  const { company, contactName, contactEmail, onTimeScore } = req.body || {};
+
+  const sets = [];
+  const params = [];
+
+  if (typeof company !== 'undefined') { sets.push('company = ?'); params.push(company); }
+  if (typeof contactName !== 'undefined') { sets.push('contactName = ?'); params.push(contactName); }
+  if (typeof contactEmail !== 'undefined') { sets.push('contactEmail = ?'); params.push(contactEmail); }
+  if (typeof onTimeScore !== 'undefined') { sets.push('onTimeScore = ?'); params.push(onTimeScore === null || onTimeScore === '' ? null : Number(onTimeScore)); }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'no fields' });
+  sets.push('updatedAt = ?');
+  params.push(new Date().toISOString());
+  params.push(id);
+
+  const sql = `UPDATE vendors SET ${sets.join(', ')} WHERE id = ?`;
+  db.run(sql, params, function(err){
+    if (err) return res.status(500).json({ error: err.message });
+    if (!this.changes) return res.status(404).json({ error: 'not found' });
+    db.get(
+      `SELECT id,company,contactName,contactEmail,onTimeScore,updatedAt FROM vendors WHERE id = ?`,
+      [id],
+      (readErr, row) => {
+        if (readErr) return res.status(500).json({ error: readErr.message });
+        res.json(row);
+      }
+    );
+  });
+});
+
+// Delete vendor
+app.delete('/api/vendors/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid vendor id' });
+  db.serialize(() => {
+    db.run(`DELETE FROM item_vendor_options WHERE vendorId = ?`, [id], (linkErr) => {
+      if (linkErr) return res.status(500).json({ error: linkErr.message });
+      db.run(`DELETE FROM vendors WHERE id = ?`, [id], function(err){
+        if (err) return res.status(500).json({ error: err.message });
+        if (!this.changes) return res.status(404).json({ error: 'not found' });
+        res.json({ deleted: 1 });
+      });
+    });
+  });
+});
+
+// Upsert item/vendor specific values
+app.put('/api/items/:itemId/vendor-options/:vendorId', (req, res) => {
+  const itemId = req.params.itemId;
+  const vendorId = Number(req.params.vendorId);
+  if (!itemId) return res.status(400).json({ error: 'invalid item id' });
+  if (!Number.isInteger(vendorId) || vendorId <= 0) return res.status(400).json({ error: 'invalid vendor id' });
+  const body = req.body || {};
+  const now = new Date().toISOString();
+  db.run(
+    `INSERT INTO item_vendor_options (itemId, vendorId, partNumber, price, shippingCost, moq, leadTimeDays, onTimeScore, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(itemId, vendorId) DO UPDATE SET
+       partNumber = excluded.partNumber,
+       price = excluded.price,
+       shippingCost = excluded.shippingCost,
+       moq = excluded.moq,
+       leadTimeDays = excluded.leadTimeDays,
+       onTimeScore = excluded.onTimeScore,
+       updatedAt = excluded.updatedAt`,
+    [
+      itemId,
+      vendorId,
+      body.partNumber || null,
+      body.price === null || body.price === '' || typeof body.price === 'undefined' ? null : Number(body.price),
+      body.shippingCost === null || body.shippingCost === '' || typeof body.shippingCost === 'undefined' ? null : Number(body.shippingCost),
+      body.moq === null || body.moq === '' || typeof body.moq === 'undefined' ? null : Number(body.moq),
+      body.leadTimeDays === null || body.leadTimeDays === '' || typeof body.leadTimeDays === 'undefined' ? null : Number(body.leadTimeDays),
+      body.onTimeScore === null || body.onTimeScore === '' || typeof body.onTimeScore === 'undefined' ? null : Number(body.onTimeScore),
+      now
+    ],
+    function(err){
+      if (err) return res.status(500).json({ error: err.message });
+      db.get(
+        `SELECT
+           ivo.id,
+           ivo.itemId,
+           ivo.vendorId,
+           v.company AS vendorCompany,
+           v.contactName,
+           v.contactEmail,
+           ivo.partNumber,
+           ivo.price,
+           ivo.shippingCost,
+           ivo.moq,
+           ivo.leadTimeDays,
+           ivo.onTimeScore,
+           ivo.updatedAt
+         FROM item_vendor_options ivo
+         JOIN vendors v ON v.id = ivo.vendorId
+         WHERE ivo.itemId = ? AND ivo.vendorId = ?`,
+        [itemId, vendorId],
+        (readErr, row) => {
+          if (readErr) return res.status(500).json({ error: readErr.message });
+          res.json(row);
+        }
+      );
+    }
+  );
+});
+
 // Update item fields (partial)
 app.put('/api/items/:id', (req, res) => {
   const id = req.params.id;
-  const { reorderLevel, reorderQty, label } = req.body || {};
+  const { reorderLevel, reorderQty, label, primaryVendorId, altVendorId } = req.body || {};
   // build dynamic set
   const sets = [];
   const params = [];
   if (typeof reorderLevel !== 'undefined') { sets.push('reorderLevel = ?'); params.push(reorderLevel); }
   if (typeof reorderQty !== 'undefined') { sets.push('reorderQty = ?'); params.push(reorderQty); }
   if (typeof label !== 'undefined') { sets.push('label = ?'); params.push(label); }
+  if (typeof primaryVendorId !== 'undefined') { sets.push('primaryVendorId = ?'); params.push(primaryVendorId === null || primaryVendorId === '' ? null : Number(primaryVendorId)); }
+  if (typeof altVendorId !== 'undefined') { sets.push('altVendorId = ?'); params.push(altVendorId === null || altVendorId === '' ? null : Number(altVendorId)); }
   if (sets.length === 0) return res.status(400).json({ error: 'no fields' });
   params.push(id);
   const sql = `UPDATE items SET ${sets.join(', ')} WHERE id = ?`;
   db.run(sql, params, function(err){
     if (err) return res.status(500).json({ error: err.message });
-    db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize FROM items WHERE id = ?`, [id], (err2, row) => {
+    db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,primaryVendorId,altVendorId FROM items WHERE id = ?`, [id], (err2, row) => {
       if (err2) return res.status(500).json({ error: err2.message });
       res.json(row);
     });
