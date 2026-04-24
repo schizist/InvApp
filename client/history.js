@@ -56,6 +56,7 @@
       o.value=it.id;
       o.textContent=it.label;
       if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) o.dataset.reorder = String(it.reorderLevel);
+      if (typeof it.salePrice !== 'undefined' && it.salePrice !== null) o.dataset.salePrice = String(it.salePrice);
       sel.appendChild(o);
     });
   }
@@ -71,6 +72,7 @@
     sel.selectedIndex = next;
     const opt = sel.options[sel.selectedIndex];
     el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
+    el('salePriceInput').value = opt && opt.dataset && opt.dataset.salePrice ? opt.dataset.salePrice : '';
     show();
   }
 
@@ -89,6 +91,15 @@
     if (!trimmed) return null;
     const n = Number(trimmed);
     return Number.isFinite(n) ? n : null;
+  }
+
+  function setSelectedItemSalePrice(value){
+    const input = el('salePriceInput');
+    if (input) input.value = value ?? '';
+    const sel = el('item');
+    if (!sel || sel.selectedIndex < 0) return;
+    if (value === null || typeof value === 'undefined') delete sel.options[sel.selectedIndex].dataset.salePrice;
+    else sel.options[sel.selectedIndex].dataset.salePrice = String(value);
   }
 
   function buildDailyLevelSeries(events, startDate, endDate){
@@ -160,7 +171,7 @@
           </dl>
           <div class="vendorGrid">
             <label for="${optionPrefix}Part">Part Number</label><input id="${optionPrefix}Part" value="${escapeHtml(option.partNumber || '')}" />
-            <label for="${optionPrefix}Price">Price</label><input id="${optionPrefix}Price" type="number" step="0.01" value="${escapeHtml(option.price ?? '')}" />
+            <label for="${optionPrefix}Price">Order Price</label><input id="${optionPrefix}Price" type="number" step="0.01" value="${escapeHtml(option.price ?? '')}" />
             <label for="${optionPrefix}Ship">Shipping</label><input id="${optionPrefix}Ship" type="number" step="0.01" value="${escapeHtml(option.shippingCost ?? '')}" />
             <label for="${optionPrefix}Moq">MOQ</label><input id="${optionPrefix}Moq" type="number" step="1" value="${escapeHtml(option.moq ?? '')}" />
           </div>
@@ -226,6 +237,7 @@
       const itemRes = await fetch('/api/items/' + encodeURIComponent(id));
       if (itemRes.ok) {
         const item = await itemRes.json();
+        if (Object.prototype.hasOwnProperty.call(item, 'salePrice')) setSelectedItemSalePrice(item.salePrice);
         renderVendors(item);
       } else {
         renderVendors({ id, vendors: [], vendorList: [] });
@@ -429,6 +441,7 @@
     const sel = el('item');
     const opt = sel && sel.options[sel.selectedIndex];
     el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
+    el('salePriceInput').value = opt && opt.dataset && opt.dataset.salePrice ? opt.dataset.salePrice : '';
     await show();
   };
   window.show = show;
@@ -446,19 +459,23 @@
     const saveBtn = el('saveReorder');
     if (saveBtn){
       saveBtn.addEventListener('click', async ()=>{
-        const sel = el('item'); const id = sel.value; const val = el('reorderInput').value;
+        const sel = el('item'); const id = sel.value; const val = el('reorderInput').value; const salePrice = normalizeNumberInput(el('salePriceInput').value);
         if (!id) return alert('Select an item');
-        const n = parseInt(val,10);
-        if (Number.isNaN(n)) return alert('Invalid number');
+        const trimmedReorder = String(val || '').trim();
+        const reorderLevel = trimmedReorder ? parseInt(trimmedReorder,10) : null;
+        if (trimmedReorder && Number.isNaN(reorderLevel)) return alert('Invalid reorder level');
         try{
           const res = await fetch('/api/items/' + encodeURIComponent(id), {
             method: 'PUT',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ reorderLevel: n })
+            body: JSON.stringify({ reorderLevel, salePrice })
           });
           if (!res.ok) throw new Error('update failed ' + res.status);
-          sel.options[sel.selectedIndex].dataset.reorder = String(n);
-          alert('Reorder level saved');
+          const savedItem = await res.json();
+          if (reorderLevel === null) delete sel.options[sel.selectedIndex].dataset.reorder;
+          else sel.options[sel.selectedIndex].dataset.reorder = String(reorderLevel);
+          setSelectedItemSalePrice(Object.prototype.hasOwnProperty.call(savedItem, 'salePrice') ? savedItem.salePrice : salePrice);
+          alert('Item saved');
           await show();
         }catch(e){
           alert('Failed to save reorder: ' + (e.message || e));
@@ -469,6 +486,7 @@
     sel && sel.addEventListener('change', async ()=>{
       const opt = sel.options[sel.selectedIndex];
       el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
+      el('salePriceInput').value = opt && opt.dataset && opt.dataset.salePrice ? opt.dataset.salePrice : '';
       await show();
     });
     const prevBtn = el('prevItemBtn');

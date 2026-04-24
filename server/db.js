@@ -91,6 +91,7 @@ function initializeSchema(dbConn){
         reorderQty INTEGER,
         unit TEXT,
         packSize INTEGER,
+        salePrice REAL,
         primaryVendorId INTEGER,
         altVendorId INTEGER
       )
@@ -101,6 +102,7 @@ function initializeSchema(dbConn){
       `ALTER TABLE items ADD COLUMN reorderQty INTEGER`,
       `ALTER TABLE items ADD COLUMN unit TEXT`,
       `ALTER TABLE items ADD COLUMN packSize INTEGER`,
+      `ALTER TABLE items ADD COLUMN salePrice REAL`,
       `ALTER TABLE items ADD COLUMN primaryVendorId INTEGER`,
       `ALTER TABLE items ADD COLUMN altVendorId INTEGER`
     ]);
@@ -168,17 +170,47 @@ function initializeSchema(dbConn){
     `);
 
     const items = [
+      ['mold_100','M-100','mold'],
+      ['mold_102','M-102','mold'],
+      ['mold_103','M-103','mold'],
+      ['mold_106','M-106','mold'],
       ['mold_112','M-112','mold'],
+      ['mold_156-4','M-156-4','mold'],
+      ['mold_156-6','M-156-6','mold'],
+      ['mold_156-8','M-156-8','mold'],
       ['mold_157','M-157','mold'],
       ['mold_157-6','M-157-6','mold'],
       ['mold_157-8','M-157-8','mold'],
       ['mold_157-12','M-157-12','mold'],
       ['mold_157-16','M-157-16','mold'],
+      ['mold_157-18','M-157-18','mold'],
       ['mold_157-24','M-157-24','mold'],
       ['mold_159','M-159','mold'],
+      ['mold_159-6','M-159-6','mold'],
+      ['mold_159-8','M-159-8','mold'],
+      ['mold_159-12','M-159-12','mold'],
+      ['mold_159-16','M-159-16','mold'],
+      ['mold_159-20','M-159-20','mold'],
+      ['mold_159-24','M-159-24','mold'],
       ['mold_161','M-161','mold'],
+      ['mold_161-6','M-161-6','mold'],
+      ['mold_161-8','M-161-8','mold'],
+      ['mold_161-12','M-161-12','mold'],
       ['mold_161-16','M-161-16','mold'],
+      ['mold_161-20','M-161-20','mold'],
       ['mold_161-24','M-161-24','mold'],
+      ['mold_163','M-163','mold'],
+      ['mold_175-4','M-175-4','mold'],
+      ['mold_175-6','M-175-6','mold'],
+      ['mold_175-8','M-175-8','mold'],
+      ['mold_175-10','M-175-10','mold'],
+      ['mold_175-14','M-175-14','mold'],
+      ['mold_175-20','M-175-20','mold'],
+      ['mold_175-24','M-175-24','mold'],
+      ['mold_2594-v16','M-2594-V16','mold'],
+      ['mold_5335','M-5335','mold'],
+      ['mold_7508','M-7508','mold'],
+      ['mold_10009','M-10009','mold'],
       ['wire_10','#10 Wire','wire'],
       ['wire_8','#8 Wire','wire'],
       ['wire_6','#6 Wire','wire'],
@@ -194,7 +226,8 @@ function initializeSchema(dbConn){
       ['enclosure_fink_purple','Purple Fink','enclosure'],
       ['enclosure_g05','G05','enclosure'],
       ['anode_hp_mag','HP Mag Anode','anode'],
-      ['SRE-002','Stelth Cu-CuSO','refcell']
+      ['SRE-002','SRE-002','refcell'],
+      ['SRE-007','SRE-007','refcell']
     ];
 
     const itemStmt = dbConn.prepare(`

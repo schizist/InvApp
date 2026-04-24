@@ -11,7 +11,6 @@ add inventory items: the construction folder should have a list of T&B hardware 
     crimps
     shunts
     tape
-    SRE-002 ref cell
-    SRE-007 ref cell
 
-Note: handling fronend redesign using claude since so good at design tasks. https://claude.ai/chat/18be4dfe-ed7a-431f-82b4-a686b934fe27
+Note: handling frontend redesign using claude since so good at design tasks. https://claude.ai/chat/18be4dfe-ed7a-431f-82b4-a686b934fe27
+

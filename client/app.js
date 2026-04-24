@@ -265,7 +265,7 @@
       const section = document.createElement('details');
       section.className = 'categoryGroup';
       section.setAttribute('data-category', category);
-      section.open = Object.prototype.hasOwnProperty.call(categoryOpenState, category) ? categoryOpenState[category] : true;
+      section.open = Object.prototype.hasOwnProperty.call(categoryOpenState, category) ? categoryOpenState[category] : false;
       section.addEventListener('toggle', () => {
         categoryOpenState[category] = section.open;
       });

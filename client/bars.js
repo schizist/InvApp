@@ -9,6 +9,7 @@
   const PANEL_MIN_WIDTH = 280;
   const PANEL_MAX_WIDTH = 760;
   let lastGroups = [];
+  const categoryOpenState = {};
   const CATEGORY_ORDER = ['mold', 'wire', 'shot', 'cap', 'enclosure', 'anode', 'refcell'];
   const CATEGORY_LABELS = {
     mold: 'Molds',
@@ -115,17 +116,36 @@
   }
 
   function renderCharts(groups){
+    snapshotCategoryOpenState();
     chartsEl.innerHTML = '';
     groups.forEach(group => {
       const details = document.createElement('details');
       details.className = 'categoryChart';
-      details.open = true;
+      details.setAttribute('data-category', group.category);
+      details.open = Object.prototype.hasOwnProperty.call(categoryOpenState, group.category) ? categoryOpenState[group.category] : true;
       const panelWidth = getPanelWidth(group.items.length);
       details.style.setProperty('--chart-width', `${panelWidth}px`);
       details.innerHTML = `<summary>${group.categoryLabel} (${group.items.length})</summary><div class="chartWrap"><canvas></canvas><div class="tooltip"></div></div>`;
       chartsEl.appendChild(details);
-      drawBars(details.querySelector('canvas'), details.querySelector('.tooltip'), group.items, group.category);
+      details.addEventListener('toggle', () => {
+        categoryOpenState[group.category] = details.open;
+        if (details.open) drawCategoryChart(details, group);
+      });
+      if (details.open) drawCategoryChart(details, group);
     });
+  }
+
+  function snapshotCategoryOpenState(){
+    const sections = chartsEl ? chartsEl.querySelectorAll('.categoryChart[data-category]') : [];
+    sections.forEach(section => {
+      const key = section.getAttribute('data-category');
+      if (!key) return;
+      categoryOpenState[key] = section.open;
+    });
+  }
+
+  function drawCategoryChart(details, group){
+    drawBars(details.querySelector('canvas'), details.querySelector('.tooltip'), group.items, group.category);
   }
 
   function getPanelWidth(itemCount){

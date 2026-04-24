@@ -71,7 +71,7 @@ app.put('/api/databases/current', (req, res) => {
 
 // GET items
 app.get('/api/items', (req, res) => {
-  db.all(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,primaryVendorId,altVendorId FROM items ORDER BY label`, (err, rows) => {
+  db.all(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId FROM items ORDER BY label`, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     // compute summary and merge
     db.all(`SELECT * FROM events ORDER BY timestamp ASC`, (err2, events) => {
@@ -176,7 +176,7 @@ app.get('/api/items/:id/history', (req, res) => {
 // GET single item
 app.get('/api/items/:id', (req, res) => {
   const id = req.params.id;
-  db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,primaryVendorId,altVendorId FROM items WHERE id = ?`, [id], (err, row) => {
+  db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId FROM items WHERE id = ?`, [id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'not found' });
     db.all(
@@ -363,13 +363,14 @@ app.put('/api/items/:itemId/vendor-options/:vendorId', (req, res) => {
 // Update item fields (partial)
 app.put('/api/items/:id', (req, res) => {
   const id = req.params.id;
-  const { reorderLevel, reorderQty, label, primaryVendorId, altVendorId } = req.body || {};
+  const { reorderLevel, reorderQty, label, salePrice, primaryVendorId, altVendorId } = req.body || {};
   // build dynamic set
   const sets = [];
   const params = [];
   if (typeof reorderLevel !== 'undefined') { sets.push('reorderLevel = ?'); params.push(reorderLevel); }
   if (typeof reorderQty !== 'undefined') { sets.push('reorderQty = ?'); params.push(reorderQty); }
   if (typeof label !== 'undefined') { sets.push('label = ?'); params.push(label); }
+  if (typeof salePrice !== 'undefined') { sets.push('salePrice = ?'); params.push(salePrice === null || salePrice === '' ? null : Number(salePrice)); }
   if (typeof primaryVendorId !== 'undefined') { sets.push('primaryVendorId = ?'); params.push(primaryVendorId === null || primaryVendorId === '' ? null : Number(primaryVendorId)); }
   if (typeof altVendorId !== 'undefined') { sets.push('altVendorId = ?'); params.push(altVendorId === null || altVendorId === '' ? null : Number(altVendorId)); }
   if (sets.length === 0) return res.status(400).json({ error: 'no fields' });
@@ -377,7 +378,7 @@ app.put('/api/items/:id', (req, res) => {
   const sql = `UPDATE items SET ${sets.join(', ')} WHERE id = ?`;
   db.run(sql, params, function(err){
     if (err) return res.status(500).json({ error: err.message });
-    db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,primaryVendorId,altVendorId FROM items WHERE id = ?`, [id], (err2, row) => {
+    db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId FROM items WHERE id = ?`, [id], (err2, row) => {
       if (err2) return res.status(500).json({ error: err2.message });
       res.json(row);
     });
