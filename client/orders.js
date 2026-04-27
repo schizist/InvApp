@@ -27,10 +27,21 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function wholeNumberValue(v){
+    const n = numberValue(v);
+    return n != null && Number.isInteger(n) ? n : null;
+  }
+
   function moneyValue(qty, cost){
     const q = numberValue(qty);
     const c = numberValue(cost);
     return q == null || c == null ? null : q * c;
+  }
+
+  function itemUnitInfo(item){
+    if (!item) return { unit: 'pcs', multiplier: 1 };
+    if ((item.category || '').toLowerCase() === 'wire') return { unit: '500 ft', multiplier: 500 };
+    return { unit: item.unit || 'pcs', multiplier: Number(item.packSize) > 0 ? Number(item.packSize) : 1 };
   }
 
   function generatedPo(){
@@ -51,7 +62,7 @@
       id: uuid(), poNumber: '', generatedPoNumber: false, clientName: '', jobName: '',
       orderDate: today(), vendorName: '', vendorContactName: '', vendorEmail: '', vendorPhone: '',
       orderedBy: '', enteredBy: '', status: 'draft', notes: '', createdAt: now, updatedAt: now,
-      lines: []
+      lines: [], progress: { ordered: 0, received: 0 }
     };
   }
 
@@ -146,7 +157,7 @@
 
   function computeLineStatus(line, received, ordered){
     if (line.status === 'cancelled') return 'cancelled';
-    if (line.status === 'complete' || received >= ordered) return 'complete';
+    if (ordered > 0 && received >= ordered) return 'complete';
     if (received > 0) return 'partially_received';
     return 'pending';
   }
@@ -177,7 +188,7 @@
         <div class="rowTop"><strong>${escapeHtml(o.poNumber || 'No PO')}</strong><span class="badge ${escapeHtml(o.status)}">${escapeHtml(o.status.replace('_',' '))}</span></div>
         <div>${escapeHtml(o.clientName || '')}${o.jobName ? ' / ' + escapeHtml(o.jobName) : ''}</div>
         <div class="small">${escapeHtml(o.vendorName || '')} | ${escapeHtml(o.orderDate || '')}</div>
-        <div class="small">${formatQty(o.progress.received)} / ${formatQty(o.progress.ordered)} received</div>
+        <div class="small">${formatQty((o.progress || {}).received)} / ${formatQty((o.progress || {}).ordered)} received</div>
       </div>`).join('') : '<div class="empty">No orders found.</div>';
     $('ordersList').querySelectorAll('.orderRow').forEach(row => {
       row.addEventListener('click', () => { current = orders.find(o => o.id === row.dataset.id); renderList(); renderEditor(); });
@@ -195,6 +206,7 @@
     $('poLabel').textContent = current.poNumber || 'Unsaved order';
     $('statusBadge').className = `badge ${current.status}`;
     $('statusBadge').textContent = current.status.replace('_',' ');
+    current.progress = current.progress || { ordered: 0, received: 0 };
     $('progressLabel').textContent = `${formatQty(current.progress.received)} of ${formatQty(current.progress.ordered)} received`;
     const lineFilter = $('lineStatusFilter').value;
     $('lines').innerHTML = (current.lines || []).map((line, idx) => ({ line, idx })).filter(row => !lineFilter || row.line.status === lineFilter).map(row => renderLine(row.line, row.idx)).join('');
@@ -203,14 +215,14 @@
 
   function renderLine(line, idx){
     const receiptText = (line.receipts || []).length
-      ? line.receipts.map(r => `${formatQty(r.quantityReceived)} on ${escapeHtml(r.receivedDate)}${r.receivedBy ? ' by ' + escapeHtml(r.receivedBy) : ''}`).join('<br>')
+      ? line.receipts.map(r => `${formatQty(r.quantityReceived)} on ${escapeHtml(r.receivedDate)}${r.receivedBy ? ' by ' + escapeHtml(r.receivedBy) : ''}${r.addToInventory ? ' | added to inventory' : ''}`).join('<br>')
       : 'No receipts';
     return `
-      <div class="lineCard" data-line-id="${escapeHtml(line.id)}">
+      <div class="lineCard" data-line-id="${escapeHtml(line.id)}" data-line-index="${idx}">
         <div class="lineGrid">
-          ${inputBlock('Inventory Item', `lineItem-${idx}`, line.itemLabel || '', 'list="itemOptions"')}
+          ${itemSelectBlock('Inventory Item', `lineItem-${idx}`, line.itemId || '')}
           ${inputBlock('Description', `lineDesc-${idx}`, line.description || '')}
-          ${inputBlock('Qty Ordered', `lineQty-${idx}`, line.quantityOrdered || '', 'type="number" step="0.01"')}
+          ${inputBlock('Qty Ordered', `lineQty-${idx}`, line.quantityOrdered || '', 'type="number" step="1" min="1" inputmode="numeric"')}
           ${inputBlock('Unit', `lineUnit-${idx}`, line.unit || '')}
           ${inputBlock('Vendor Item #', `lineVendor-${idx}`, line.vendorItemNumber || '')}
           ${inputBlock('Mfr Part #', `lineMfr-${idx}`, line.manufacturerPartNumber || '')}
@@ -222,12 +234,13 @@
           <button type="button" class="btn btnNeutral removeLineBtn">Remove</button>
         </div>
         <div class="receiveBox">
-          ${inputBlock('Receive Qty', `receiveQty-${idx}`, '', 'type="number" step="0.01"')}
+          ${inputBlock('Quantity Received', `receiveQty-${idx}`, '', 'type="number" step="1" min="1" inputmode="numeric"')}
           ${inputBlock('Received Date', `receiveDate-${idx}`, today(), 'type="date"')}
           ${inputBlock('Received By', `receiveBy-${idx}`, '')}
           ${inputBlock('Receipt Note', `receiveNote-${idx}`, '')}
-          <button type="button" class="btn btnPrimary receiveBtn">Receive Item</button>
-          <button type="button" class="btn btnNeutral completeLineBtn">Mark Complete</button>
+          <button type="button" class="btn btnPrimary receiveFullBtn">Receive Full</button>
+          <button type="button" class="btn btnPrimary receivePartialBtn">Receive Partial</button>
+          <button type="button" class="btn btnNeutral saveLineBtn">Save Item</button>
         </div>
         <div class="receipts">${receiptText}</div>
       </div>`;
@@ -237,9 +250,18 @@
     return `<div><label for="${id}">${label}</label><input id="${id}" ${attrs || ''} value="${escapeHtml(value)}" /></div>`;
   }
 
+  function itemSelectBlock(label, id, value){
+    const options = ['<option value="">Select item</option>'].concat(items.map(item => (
+      `<option value="${escapeHtml(item.id)}" ${String(item.id) === String(value) ? 'selected' : ''}>${escapeHtml(item.label)}</option>`
+    )));
+    return `<div><label for="${id}">${label}</label><select id="${id}">${options.join('')}</select></div>`;
+  }
+
   function bindLineEvents(){
-    $('lines').querySelectorAll('.lineCard').forEach((card, idx) => {
+    $('lines').querySelectorAll('.lineCard').forEach(card => {
+      const idx = Number(card.dataset.lineIndex);
       card.querySelectorAll('input').forEach(input => input.addEventListener('change', () => updateLineFromForm(idx)));
+      card.querySelectorAll('select').forEach(select => select.addEventListener('change', () => updateLineFromForm(idx)));
       card.querySelector('.removeLineBtn').addEventListener('click', async () => {
         const line = current.lines[idx];
         if ((line.receipts || []).length) return alert('Lines with receipt history cannot be removed.');
@@ -248,39 +270,53 @@
         await IDB.queueOrderChange({ id: uuid(), type: 'lineDelete', lineId: line.id, createdAt: new Date().toISOString() });
         renderEditor();
       });
-      card.querySelector('.receiveBtn').addEventListener('click', () => receiveLine(idx));
-      card.querySelector('.completeLineBtn').addEventListener('click', () => markLineComplete(idx));
+      card.querySelector('.receiveFullBtn').addEventListener('click', () => receiveLine(idx, true));
+      card.querySelector('.receivePartialBtn').addEventListener('click', () => receiveLine(idx, false));
+      card.querySelector('.saveLineBtn').addEventListener('click', () => saveLineItem(idx));
     });
   }
 
   function updateLineFromForm(idx){
     const line = current.lines[idx];
-    const itemLabel = $(`lineItem-${idx}`).value.trim();
-    const found = items.find(it => it.label === itemLabel);
-    const quantityOrdered = numberValue($(`lineQty-${idx}`).value);
-    line.itemLabel = itemLabel;
+    if (!line || !$(`lineItem-${idx}`)) return;
+    const priorLabel = line.itemLabel || '';
+    const itemId = $(`lineItem-${idx}`).value.trim();
+    const found = items.find(it => it.id === itemId);
+    const quantityOrdered = wholeNumberValue($(`lineQty-${idx}`).value);
+    const descInput = $(`lineDesc-${idx}`);
+    const unitInput = $(`lineUnit-${idx}`);
+    if (found && (!descInput.value.trim() || descInput.value.trim() === priorLabel)) descInput.value = found.label;
+    if (found) {
+      const unitInfo = itemUnitInfo(found);
+      if (!unitInput.value.trim() || unitInput.value === 'pcs') unitInput.value = unitInfo.unit;
+    }
+    line.itemLabel = found ? found.label : '';
     line.itemId = found ? found.id : null;
-    line.description = $(`lineDesc-${idx}`).value.trim() || itemLabel;
+    line.description = descInput.value.trim() || (found ? found.label : '');
     line.quantityOrdered = quantityOrdered || 0;
-    line.unit = $(`lineUnit-${idx}`).value.trim();
+    line.unit = unitInput.value.trim();
     line.vendorItemNumber = $(`lineVendor-${idx}`).value.trim();
     line.manufacturerPartNumber = $(`lineMfr-${idx}`).value.trim();
     line.unitCost = numberValue($(`lineCost-${idx}`).value);
     line.lineTotal = moneyValue(line.quantityOrdered, line.unitCost);
     line.notes = $(`lineNotes-${idx}`).value.trim();
-    line.status = computeLineStatus(line, Number(line.quantityReceived) || 0, Number(line.quantityOrdered) || 0);
+    line.quantityReceived = (line.receipts || []).reduce((sum, receipt) => sum + (Number(receipt.quantityReceived) || 0), 0);
+    line.remainder = Math.max(0, (Number(line.quantityOrdered) || 0) - line.quantityReceived);
+    line.status = computeLineStatus(line, line.quantityReceived, Number(line.quantityOrdered) || 0);
   }
 
   function inventoryEventForReceipt(line, receipt){
     if (!line.itemId) return null;
+    const item = items.find(it => it.id === line.itemId);
+    const unitInfo = itemUnitInfo(item);
     return {
       id: `order-receipt-${receipt.id}`,
       itemId: line.itemId,
       type: 'DELTA',
-      qty: receipt.quantityReceived,
+      qty: receipt.quantityReceived * unitInfo.multiplier,
       timestamp: receipt.createdAt,
       sessionId: null,
-      note: `Received on order ${current.poNumber || current.id}`,
+      note: `Received ${receipt.quantityReceived} ${line.unit || unitInfo.unit} on order ${current.poNumber || current.id}`,
       source: 'order_receipt',
       orderId: current.id,
       orderLineId: line.id,
@@ -288,22 +324,27 @@
     };
   }
 
-  async function receiveLine(idx){
+  async function receiveLine(idx, receiveFull){
     updateLineFromForm(idx);
     const line = current.lines[idx];
-    const qty = numberValue($(`receiveQty-${idx}`).value);
+    const qty = receiveFull ? Math.max(0, Number(line.remainder) || 0) : wholeNumberValue($(`receiveQty-${idx}`).value);
     if (!qty || qty <= 0) return alert('Received quantity must be positive.');
+    if (!Number.isInteger(qty)) return alert('Quantity received must be a whole number.');
     if (qty > line.remainder && !confirm('Received quantity is greater than the remainder. Continue?')) return;
+    const addToInventory = line.itemId
+      ? confirm(`Add ${formatQty(qty)} received ${line.unit || 'units'} of ${line.itemLabel || line.description} to inventory?`)
+      : false;
     const receipt = {
       id: uuid(), orderId: current.id, orderLineId: line.id, quantityReceived: qty,
       receivedDate: $(`receiveDate-${idx}`).value || today(),
       receivedBy: $(`receiveBy-${idx}`).value.trim(),
       note: $(`receiveNote-${idx}`).value.trim(),
+      addToInventory,
       createdAt: new Date().toISOString()
     };
     await IDB.putOrderReceipt(receipt);
     const invEvent = inventoryEventForReceipt(line, receipt);
-    if (invEvent) await IDB.addEvent(invEvent);
+    if (addToInventory && invEvent) await IDB.addEvent(invEvent);
     line.receipts = (line.receipts || []).concat(receipt);
     line.quantityReceived = (Number(line.quantityReceived) || 0) + qty;
     line.remainder = (Number(line.quantityOrdered) || 0) - line.quantityReceived;
@@ -313,10 +354,8 @@
     if (navigator.onLine) syncOrders().catch(()=>{});
   }
 
-  async function markLineComplete(idx){
+  async function saveLineItem(idx){
     updateLineFromForm(idx);
-    const line = current.lines[idx];
-    line.status = 'complete';
     await saveCurrent(current.status, true);
   }
 
@@ -343,8 +382,8 @@
     if (!current.orderDate) return alert('Order date is required.');
     if (!current.vendorName) return alert('Ordered From is required.');
     current.lines.forEach((_line, idx) => updateLineFromForm(idx));
-    const badLine = current.lines.find(line => !line.description || !(Number(line.quantityOrdered) > 0));
-    if (badLine) return alert('Each line item needs a description and positive ordered quantity.');
+    const badLine = current.lines.find(line => !line.description || !(Number(line.quantityOrdered) > 0) || !Number.isInteger(Number(line.quantityOrdered)));
+    if (badLine) return alert('Each line item needs a description and a positive whole-number ordered quantity.');
     current.status = computeStatus(current);
     await IDB.putOrder(Object.assign({}, current, { lines: undefined, receipts: undefined }));
     for (const line of current.lines) {
@@ -382,6 +421,9 @@
         } else if (change.type === 'lineDelete') {
           const res = await fetch('/api/order-lines/' + encodeURIComponent(change.lineId), { method:'DELETE' });
           if (!res.ok) throw new Error(await res.text());
+        } else if (change.type === 'orderDelete') {
+          const res = await fetch('/api/orders/' + encodeURIComponent(change.orderId), { method:'DELETE' });
+          if (!res.ok && res.status !== 404) throw new Error(await res.text());
         }
         done.push(change.id);
       }catch(err){
@@ -408,12 +450,25 @@
   }
 
   function addLine(){
+    if (!current) return;
     current.lines.push({
       id: uuid(), orderId: current.id, itemId: null, itemLabel: '', description: '',
       quantityOrdered: 1, unit: 'pcs', vendorItemNumber: '', manufacturerPartNumber: '',
       unitCost: null, lineTotal: null, quantityReceived: 0, remainder: 1, status: 'pending', notes: '', sortOrder: current.lines.length, receipts: []
     });
     renderEditor();
+  }
+
+  async function deleteCurrentOrder(){
+    if (!current) return;
+    const label = current.poNumber || current.id;
+    if (!confirm(`Delete order ${label}? This removes the order, its line items, receipts, and any inventory receipt deltas created from it.`)) return;
+    const orderId = current.id;
+    await IDB.deleteOrder(orderId);
+    await IDB.queueOrderChange({ id: uuid(), type: 'orderDelete', orderId, createdAt: new Date().toISOString() });
+    current = null;
+    await loadOrders();
+    if (navigator.onLine) syncOrders().catch(()=>{});
   }
 
   function duplicateOrder(){
@@ -457,6 +512,7 @@
   $('saveDraftBtn').addEventListener('click', () => saveCurrent('draft', true));
   $('markOrderedBtn').addEventListener('click', () => saveCurrent('ordered', true));
   $('cancelOrderBtn').addEventListener('click', () => saveCurrent('cancelled', true));
+  $('deleteOrderBtn').addEventListener('click', () => deleteCurrentOrder());
   $('syncOrdersBtn').addEventListener('click', () => syncOrders());
   $('searchInput').addEventListener('input', renderList);
   $('statusFilter').addEventListener('change', renderList);

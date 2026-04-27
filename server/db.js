@@ -321,6 +321,9 @@ function initializeSchema(dbConn){
     items.forEach(it => itemStmt.run(it[0], it[1], it[2]));
     itemStmt.finalize();
 
+    dbConn.run(`UPDATE items SET unit = '500 ft', packSize = 500 WHERE category = 'wire'`);
+    dbConn.run(`UPDATE items SET unit = COALESCE(unit, 'pcs'), packSize = COALESCE(packSize, 1) WHERE category <> 'wire'`);
+
     const ids = items.map(it => it[0]);
     if (ids.length > 0) {
       const placeholders = ids.map(() => '?').join(',');

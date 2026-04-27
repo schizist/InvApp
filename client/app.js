@@ -327,8 +327,8 @@
         btnSet.addEventListener('click', async ()=>{
           const val = prompt('Enter absolute count for '+it.label);
           if (val===null) return;
-          const n = parseInt(val,10);
-          if (Number.isNaN(n)) { alert('Invalid number'); return; }
+          const n = Number(val);
+          if (!Number.isInteger(n)) { alert('Enter a whole number.'); return; }
           const ev = { id: uuidv4(), itemId: it.id, type: 'COUNT', qty: n, timestamp: new Date().toISOString(), source: 'mobile', sessionId: currentSession };
           await queueEvent(ev);
         });

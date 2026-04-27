@@ -109,7 +109,7 @@ function decorateOrder(order, lines, receipts){
     const storedStatus = ORDER_LINE_STATUSES.has(line.status) ? line.status : 'pending';
     const lineStatus = storedStatus === 'cancelled'
       ? 'cancelled'
-      : (storedStatus === 'complete' || quantityReceived >= quantityOrdered)
+      : (quantityOrdered > 0 && quantityReceived >= quantityOrdered)
         ? 'complete'
         : quantityReceived > 0
           ? 'partially_received'
@@ -123,8 +123,19 @@ function decorateOrder(order, lines, receipts){
       receipts: lineReceipts
     });
   });
+  const activeLines = decoratedLines.filter(line => line.status !== 'cancelled');
+  const computedStatus = order.status === 'draft' || order.status === 'cancelled'
+    ? order.status
+    : !activeLines.length
+      ? 'ordered'
+      : activeLines.every(line => (Number(line.quantityReceived) || 0) >= (Number(line.quantityOrdered) || 0))
+        ? 'received'
+        : activeLines.some(line => (Number(line.quantityReceived) || 0) > 0)
+          ? 'partially_received'
+          : 'ordered';
   return Object.assign({}, order, {
     generatedPoNumber: !!order.generatedPoNumber,
+    status: computedStatus,
     lines: decoratedLines,
     receipts,
     progress: { ordered: totalOrdered, received: totalReceived }
@@ -143,8 +154,8 @@ function computeOrderStatus(orderId, fallbackStatus, cb){
     if (err) return cb(err);
     const activeRows = (rows || []).filter(r => r.status !== 'cancelled');
     if (activeRows.length === 0) return cb(null, 'ordered');
-    const anyReceived = activeRows.some(r => (Number(r.quantityReceived) || 0) > 0 || r.status === 'complete');
-    const allComplete = activeRows.every(r => r.status === 'complete' || (Number(r.quantityReceived) || 0) >= (Number(r.quantityOrdered) || 0));
+    const anyReceived = activeRows.some(r => (Number(r.quantityReceived) || 0) > 0);
+    const allComplete = activeRows.every(r => (Number(r.quantityOrdered) || 0) > 0 && (Number(r.quantityReceived) || 0) >= (Number(r.quantityOrdered) || 0));
     if (allComplete) return cb(null, 'received');
     if (anyReceived) return cb(null, 'partially_received');
     cb(null, 'ordered');
@@ -397,9 +408,33 @@ app.put('/api/orders/:id', (req, res) => {
   });
 });
 
+app.delete('/api/orders/:id', (req, res) => {
+  const orderId = req.params.id;
+  db.get(`SELECT id FROM orders WHERE id = ?`, [orderId], (findErr, existing) => {
+    if (findErr) return res.status(500).json({ error: findErr.message });
+    if (!existing) return res.status(404).json({ error: 'not found' });
+    db.serialize(() => {
+      db.run(`DELETE FROM events WHERE orderId = ? AND source = 'order_receipt'`, [orderId], eventErr => {
+        if (eventErr) return res.status(500).json({ error: eventErr.message });
+        db.run(`DELETE FROM order_receipts WHERE orderId = ?`, [orderId], receiptErr => {
+          if (receiptErr) return res.status(500).json({ error: receiptErr.message });
+          db.run(`DELETE FROM order_lines WHERE orderId = ?`, [orderId], lineErr => {
+            if (lineErr) return res.status(500).json({ error: lineErr.message });
+            db.run(`DELETE FROM orders WHERE id = ?`, [orderId], function(orderErr){
+              if (orderErr) return res.status(500).json({ error: orderErr.message });
+              res.json({ deleted: this.changes || 0 });
+            });
+          });
+        });
+      });
+    });
+  });
+});
+
 function upsertOrderLine(body, orderId, res, statusCode){
   const quantityOrdered = normalizeNumber(body.quantityOrdered);
   if (!quantityOrdered || quantityOrdered <= 0) return res.status(400).json({ error: 'quantityOrdered must be positive' });
+  if (!Number.isInteger(quantityOrdered)) return res.status(400).json({ error: 'quantityOrdered must be a whole number' });
   const description = String(body.description || '').trim();
   if (!description) return res.status(400).json({ error: 'description is required' });
   const lineTotal = typeof body.lineTotal !== 'undefined' ? normalizeNumber(body.lineTotal) : (() => {
@@ -451,25 +486,30 @@ function upsertOrderLine(body, orderId, res, statusCode){
 
 function createInventoryEventForReceipt(line, receipt, cb){
   if (!line.itemId) return cb && cb(null);
-  const eventId = `order-receipt-${receipt.id}`;
-  db.run(
-    `INSERT OR IGNORE INTO events(id,itemId,type,qty,timestamp,sessionId,note,source,orderId,orderLineId,receiptId)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-    [
-      eventId,
-      line.itemId,
-      'DELTA',
-      receipt.quantityReceived,
-      receipt.createdAt,
-      null,
-      `Received on order ${receipt.orderId}`,
-      'order_receipt',
-      receipt.orderId,
-      receipt.orderLineId,
-      receipt.id
-    ],
-    err => cb && cb(err)
-  );
+  db.get(`SELECT category, packSize FROM items WHERE id = ?`, [line.itemId], (itemErr, item) => {
+    if (itemErr) return cb && cb(itemErr);
+    const category = item && item.category ? String(item.category).toLowerCase() : '';
+    const multiplier = category === 'wire' ? 500 : (Number(item && item.packSize) > 0 ? Number(item.packSize) : 1);
+    const eventId = `order-receipt-${receipt.id}`;
+    db.run(
+      `INSERT OR IGNORE INTO events(id,itemId,type,qty,timestamp,sessionId,note,source,orderId,orderLineId,receiptId)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        eventId,
+        line.itemId,
+        'DELTA',
+        receipt.quantityReceived * multiplier,
+        receipt.createdAt,
+        null,
+        `Received ${receipt.quantityReceived} ${line.unit || 'units'} on order ${receipt.orderId}`,
+        'order_receipt',
+        receipt.orderId,
+        receipt.orderLineId,
+        receipt.id
+      ],
+      err => cb && cb(err)
+    );
+  });
 }
 
 app.post('/api/orders/:id/lines', (req, res) => {
@@ -509,6 +549,7 @@ app.post('/api/order-lines/:id/receipts', (req, res) => {
     if (!line) return res.status(404).json({ error: 'line not found' });
     const qty = normalizeNumber(req.body && req.body.quantityReceived);
     if (!qty || qty <= 0) return res.status(400).json({ error: 'quantityReceived must be positive' });
+    if (!Number.isInteger(qty)) return res.status(400).json({ error: 'quantityReceived must be a whole number' });
     const id = (req.body && req.body.id) || generateId();
     const receivedDate = (req.body && req.body.receivedDate) || new Date().toISOString().slice(0,10);
     const createdAt = (req.body && req.body.createdAt) || new Date().toISOString();
@@ -531,14 +572,19 @@ app.post('/api/order-lines/:id/receipts', (req, res) => {
       receipt.receivedBy, receipt.note, receipt.createdAt
     ], err => {
       if (err) return res.status(400).json({ error: err.message });
-      createInventoryEventForReceipt(line, receipt, eventErr => {
-        if (eventErr) return res.status(500).json({ error: eventErr.message });
+      const addToInventory = !!(req.body && req.body.addToInventory);
+      const finishReceipt = () => {
         updateOrderStatus(line.orderId, () => {
           readOrder(line.orderId, (readErr, order) => {
             if (readErr) return res.status(500).json({ error: readErr.message });
             res.status(201).json(order);
           });
         });
+      };
+      if (!addToInventory) return finishReceipt();
+      createInventoryEventForReceipt(line, receipt, eventErr => {
+        if (eventErr) return res.status(500).json({ error: eventErr.message });
+        finishReceipt();
       });
     });
   });
@@ -590,7 +636,9 @@ app.post('/api/events', (req, res) => {
         // enforce allowed types
         const t = (ev.type||'').toUpperCase();
         if (t !== 'DELTA' && t !== 'COUNT') { ignored++; return; }
-        stmt.run(ev.id, ev.itemId, t, ev.qty, ev.timestamp, ev.sessionId || null, ev.note || null, ev.source || 'mobile', ev.orderId || null, ev.orderLineId || null, ev.receiptId || null, function(err) {
+        const qty = normalizeNumber(ev.qty);
+        if (qty == null || !Number.isInteger(qty)) { ignored++; return; }
+        stmt.run(ev.id, ev.itemId, t, qty, ev.timestamp, ev.sessionId || null, ev.note || null, ev.source || 'mobile', ev.orderId || null, ev.orderLineId || null, ev.receiptId || null, function(err) {
           if (err) ignored++;
           else {
             if (this.changes && this.changes > 0) inserted++;

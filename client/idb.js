@@ -213,6 +213,39 @@
     });
   }
 
+  async function deleteOrder(id){
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(['orders', 'orderLines', 'orderReceipts', 'events'], 'readwrite');
+      tx.objectStore('orders').delete(id);
+
+      const lineStore = tx.objectStore('orderLines');
+      const receiptStore = tx.objectStore('orderReceipts');
+      const eventStore = tx.objectStore('events');
+      lineStore.index('orderId').openKeyCursor(IDBKeyRange.only(id)).onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (!cursor) return;
+        lineStore.delete(cursor.primaryKey);
+        cursor.continue();
+      };
+      receiptStore.index('orderId').openKeyCursor(IDBKeyRange.only(id)).onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (!cursor) return;
+        receiptStore.delete(cursor.primaryKey);
+        cursor.continue();
+      };
+      eventStore.openCursor().onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (!cursor) return;
+        if (cursor.value && cursor.value.orderId === id) eventStore.delete(cursor.primaryKey);
+        cursor.continue();
+      };
+
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
   async function storeOrderGraph(order){
     if (!order || !order.id) return;
     const db = await open();
@@ -250,6 +283,7 @@
     getOrder,
     getOrderLines,
     getOrderReceipts,
+    deleteOrder,
     deleteOrderLine,
     queueOrderChange,
     getQueuedOrderChanges,
