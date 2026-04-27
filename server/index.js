@@ -29,6 +29,227 @@ app.use((req, res, next) => {
 // Serve client static files
 app.use('/', express.static(path.join(__dirname, '..', 'client')));
 
+const ORDER_STATUSES = new Set(['draft', 'ordered', 'partially_received', 'received', 'cancelled']);
+const ORDER_LINE_STATUSES = new Set(['pending', 'partially_received', 'complete', 'cancelled']);
+
+function normalizeNumber(value){
+  if (value === null || value === '' || typeof value === 'undefined') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeOrderPayload(body, existing){
+  const now = new Date().toISOString();
+  return {
+    id: String(body.id || (existing && existing.id) || '').trim(),
+    poNumber: String(body.poNumber || (existing && existing.poNumber) || '').trim(),
+    generatedPoNumber: body.generatedPoNumber ? 1 : 0,
+    clientName: (body.clientName || '').trim() || null,
+    jobName: (body.jobName || '').trim() || null,
+    orderDate: String(body.orderDate || '').trim(),
+    vendorName: String(body.vendorName || '').trim(),
+    vendorContactName: (body.vendorContactName || '').trim() || null,
+    vendorEmail: (body.vendorEmail || '').trim() || null,
+    vendorPhone: (body.vendorPhone || '').trim() || null,
+    orderedBy: (body.orderedBy || '').trim() || null,
+    enteredBy: (body.enteredBy || '').trim() || null,
+    status: ORDER_STATUSES.has(body.status) ? body.status : ((existing && existing.status) || 'draft'),
+    notes: (body.notes || '').trim() || null,
+    createdAt: body.createdAt || (existing && existing.createdAt) || now,
+    updatedAt: body.updatedAt || now
+  };
+}
+
+function generateId(){
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+function generatedPoForDate(orderDate, cb){
+  const day = String(orderDate || new Date().toISOString().slice(0,10)).replace(/-/g, '');
+  const prefix = `PO-${day}-`;
+  db.all(`SELECT poNumber FROM orders WHERE poNumber LIKE ?`, [prefix + '%'], (err, rows) => {
+    if (err) return cb(err);
+    const max = (rows || []).reduce((m, row) => {
+      const match = String(row.poNumber || '').match(/-(\d+)$/);
+      return match ? Math.max(m, Number(match[1]) || 0) : m;
+    }, 0);
+    cb(null, `${prefix}${String(max + 1).padStart(3, '0')}`);
+  });
+}
+
+function readOrder(id, cb){
+  db.get(`SELECT * FROM orders WHERE id = ?`, [id], (err, order) => {
+    if (err || !order) return cb(err, order || null);
+    db.all(`SELECT * FROM order_lines WHERE orderId = ? ORDER BY sortOrder ASC, description ASC`, [id], (lineErr, lines) => {
+      if (lineErr) return cb(lineErr);
+      db.all(`SELECT * FROM order_receipts WHERE orderId = ? ORDER BY receivedDate ASC, createdAt ASC`, [id], (receiptErr, receipts) => {
+        if (receiptErr) return cb(receiptErr);
+        cb(null, decorateOrder(order, lines || [], receipts || []));
+      });
+    });
+  });
+}
+
+function decorateOrder(order, lines, receipts){
+  const byLine = {};
+  receipts.forEach(r => {
+    byLine[r.orderLineId] = byLine[r.orderLineId] || [];
+    byLine[r.orderLineId].push(r);
+  });
+  let totalOrdered = 0;
+  let totalReceived = 0;
+  const decoratedLines = lines.map(line => {
+    const lineReceipts = byLine[line.id] || [];
+    const quantityReceived = lineReceipts.reduce((sum, r) => sum + (Number(r.quantityReceived) || 0), 0);
+    const quantityOrdered = Number(line.quantityOrdered) || 0;
+    const storedStatus = ORDER_LINE_STATUSES.has(line.status) ? line.status : 'pending';
+    const lineStatus = storedStatus === 'cancelled'
+      ? 'cancelled'
+      : (storedStatus === 'complete' || quantityReceived >= quantityOrdered)
+        ? 'complete'
+        : quantityReceived > 0
+          ? 'partially_received'
+          : 'pending';
+    totalOrdered += quantityOrdered;
+    totalReceived += Math.min(quantityOrdered, quantityReceived);
+    return Object.assign({}, line, {
+      quantityReceived,
+      remainder: quantityOrdered - quantityReceived,
+      status: lineStatus,
+      receipts: lineReceipts
+    });
+  });
+  return Object.assign({}, order, {
+    generatedPoNumber: !!order.generatedPoNumber,
+    lines: decoratedLines,
+    receipts,
+    progress: { ordered: totalOrdered, received: totalReceived }
+  });
+}
+
+function computeOrderStatus(orderId, fallbackStatus, cb){
+  if (fallbackStatus === 'draft' || fallbackStatus === 'cancelled') return cb(null, fallbackStatus);
+  db.all(`
+    SELECT l.id, l.quantityOrdered, l.status, COALESCE(SUM(r.quantityReceived), 0) AS quantityReceived
+    FROM order_lines l
+    LEFT JOIN order_receipts r ON r.orderLineId = l.id
+    WHERE l.orderId = ?
+    GROUP BY l.id
+  `, [orderId], (err, rows) => {
+    if (err) return cb(err);
+    const activeRows = (rows || []).filter(r => r.status !== 'cancelled');
+    if (activeRows.length === 0) return cb(null, 'ordered');
+    const anyReceived = activeRows.some(r => (Number(r.quantityReceived) || 0) > 0 || r.status === 'complete');
+    const allComplete = activeRows.every(r => r.status === 'complete' || (Number(r.quantityReceived) || 0) >= (Number(r.quantityOrdered) || 0));
+    if (allComplete) return cb(null, 'received');
+    if (anyReceived) return cb(null, 'partially_received');
+    cb(null, 'ordered');
+  });
+}
+
+function updateOrderStatus(orderId, cb){
+  db.get(`SELECT status FROM orders WHERE id = ?`, [orderId], (err, order) => {
+    if (err || !order) return cb && cb(err);
+    computeOrderStatus(orderId, order.status, (statusErr, nextStatus) => {
+      if (statusErr) return cb && cb(statusErr);
+      db.run(`UPDATE orders SET status = ?, updatedAt = ? WHERE id = ?`, [nextStatus, new Date().toISOString(), orderId], runErr => {
+        if (cb) cb(runErr, nextStatus);
+      });
+    });
+  });
+}
+
+function escapeHtml(value){
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderOrderSheet(order){
+  const noteRows = [];
+  const rows = (order.lines || []).map(line => {
+    const receipts = (line.receipts || []).slice(0, 3);
+    const extra = (line.receipts || []).slice(3);
+    if (line.notes) noteRows.push(`<p><strong>${escapeHtml(line.description)}:</strong> ${escapeHtml(line.notes)}</p>`);
+    if (extra.length) {
+      noteRows.push(`<p><strong>${escapeHtml(line.description)} additional receipts:</strong> ${extra.map(r => `${escapeHtml(r.quantityReceived)} on ${escapeHtml(r.receivedDate)}`).join(', ')}</p>`);
+    }
+    const cells = [0,1,2].map(i => {
+      const receipt = receipts[i];
+      return `<td>${receipt ? escapeHtml(receipt.quantityReceived) : ''}</td><td>${receipt ? escapeHtml(receipt.receivedDate) : ''}</td>`;
+    }).join('');
+    return `
+      <tr>
+        <td>${escapeHtml(line.quantityOrdered)}</td>
+        <td>${escapeHtml(line.description)}</td>
+        ${cells}
+        <td>${escapeHtml(line.remainder)}</td>
+        <td>${escapeHtml(String(line.status || '').replace('_', ' '))}</td>
+      </tr>
+    `;
+  }).join('');
+  if (order.notes) noteRows.unshift(`<p><strong>Order notes:</strong> ${escapeHtml(order.notes)}</p>`);
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Order Sheet ${escapeHtml(order.poNumber)}</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:28px;color:#111}
+    .top{display:grid;grid-template-columns:120px 1fr;gap:18px;align-items:start}
+    .logo{height:84px;border:1px solid #ddd;display:flex;align-items:center;justify-content:center}
+    .logo img{max-width:72px;max-height:72px}
+    h1{text-align:center;margin:0 0 18px 0;letter-spacing:1px}
+    .header{display:grid;grid-template-columns:170px 1fr 150px 1fr;gap:8px 10px;margin-bottom:18px}
+    .label{font-weight:bold}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #111;padding:7px;vertical-align:top}
+    th{font-size:12px;background:#f1f1f1}
+    .notes{margin-top:18px}
+    @media print{body{margin:12mm}.noPrint{display:none}}
+  </style>
+</head>
+<body>
+  <button class="noPrint" onclick="window.print()">Print</button>
+  <div class="top">
+    <div class="logo"><img src="/favicon-32x32.png" onerror="this.style.display='none'" alt=""></div>
+    <div>
+      <h1>ORDER STATUS</h1>
+      <div class="header">
+        <div class="label">CONTRACTOR / CLIENT:</div><div>${escapeHtml(order.clientName)}</div>
+        <div class="label">STATUS:</div><div>${escapeHtml(order.status)}</div>
+        <div class="label">PO / JOB:</div><div>${escapeHtml(order.poNumber)}${order.jobName ? ' / ' + escapeHtml(order.jobName) : ''}</div>
+        <div class="label">ORDER DATE:</div><div>${escapeHtml(order.orderDate)}</div>
+        <div class="label">ORDERED FROM:</div><div>${escapeHtml(order.vendorName)}</div>
+        <div class="label">ORDERED BY:</div><div>${escapeHtml(order.orderedBy)}</div>
+        <div class="label">ENTERED BY:</div><div>${escapeHtml(order.enteredBy)}</div>
+      </div>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>NO. ORDERED</th><th>DESCRIPTION</th>
+        <th>NO. ARRIVED</th><th>DATE</th>
+        <th>NO. ARRIVED</th><th>DATE</th>
+        <th>NO. ARRIVED</th><th>DATE</th>
+        <th>REMAINDER</th><th>STATUS</th>
+      </tr>
+    </thead>
+    <tbody>${rows || '<tr><td colspan="10">No line items</td></tr>'}</tbody>
+  </table>
+  ${noteRows.length ? `<div class="notes"><h2>Notes</h2>${noteRows.join('')}</div>` : ''}
+</body>
+</html>`;
+}
+
 // List databases and current selection
 app.get('/api/databases', (_req, res) => {
   try{
@@ -69,6 +290,268 @@ app.put('/api/databases/current', (req, res) => {
   }
 });
 
+app.get('/api/orders', (_req, res) => {
+  db.all(`SELECT * FROM orders ORDER BY orderDate DESC, updatedAt DESC`, (err, orders) => {
+    if (err) return res.status(500).json({ error: err.message });
+    db.all(`SELECT * FROM order_lines`, (lineErr, lines) => {
+      if (lineErr) return res.status(500).json({ error: lineErr.message });
+      db.all(`SELECT * FROM order_receipts`, (receiptErr, receipts) => {
+        if (receiptErr) return res.status(500).json({ error: receiptErr.message });
+        const byOrderLine = {};
+        (lines || []).forEach(line => {
+          byOrderLine[line.orderId] = byOrderLine[line.orderId] || [];
+          byOrderLine[line.orderId].push(line);
+        });
+        const byOrderReceipt = {};
+        (receipts || []).forEach(receipt => {
+          byOrderReceipt[receipt.orderId] = byOrderReceipt[receipt.orderId] || [];
+          byOrderReceipt[receipt.orderId].push(receipt);
+        });
+        res.json((orders || []).map(order => decorateOrder(order, byOrderLine[order.id] || [], byOrderReceipt[order.id] || [])));
+      });
+    });
+  });
+});
+
+app.get('/api/orders/:id', (req, res) => {
+  readOrder(req.params.id, (err, order) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!order) return res.status(404).json({ error: 'not found' });
+    res.json(order);
+  });
+});
+
+app.post('/api/orders', (req, res) => {
+  const body = req.body || {};
+  const id = String(body.id || generateId());
+  const input = Object.assign({}, body, { id });
+  const finish = (poNumber, generatedPoNumber) => {
+    const order = normalizeOrderPayload(Object.assign({}, input, { poNumber, generatedPoNumber }), null);
+    if (!order.orderDate) return res.status(400).json({ error: 'orderDate is required' });
+    if (!order.vendorName) return res.status(400).json({ error: 'vendorName is required' });
+    db.run(`
+      INSERT INTO orders (
+        id, poNumber, generatedPoNumber, clientName, jobName, orderDate, vendorName,
+        vendorContactName, vendorEmail, vendorPhone, orderedBy, enteredBy, status, notes, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        poNumber = excluded.poNumber,
+        generatedPoNumber = excluded.generatedPoNumber,
+        clientName = excluded.clientName,
+        jobName = excluded.jobName,
+        orderDate = excluded.orderDate,
+        vendorName = excluded.vendorName,
+        vendorContactName = excluded.vendorContactName,
+        vendorEmail = excluded.vendorEmail,
+        vendorPhone = excluded.vendorPhone,
+        orderedBy = excluded.orderedBy,
+        enteredBy = excluded.enteredBy,
+        status = excluded.status,
+        notes = excluded.notes,
+        updatedAt = excluded.updatedAt
+    `, [
+      order.id, order.poNumber, order.generatedPoNumber, order.clientName, order.jobName, order.orderDate, order.vendorName,
+      order.vendorContactName, order.vendorEmail, order.vendorPhone, order.orderedBy, order.enteredBy, order.status, order.notes, order.createdAt, order.updatedAt
+    ], err => {
+      if (err) return res.status(400).json({ error: err.message });
+      readOrder(order.id, (readErr, saved) => {
+        if (readErr) return res.status(500).json({ error: readErr.message });
+        res.status(201).json(saved);
+      });
+    });
+  };
+  if (String(body.poNumber || '').trim()) return finish(String(body.poNumber).trim(), !!body.generatedPoNumber);
+  generatedPoForDate(body.orderDate || new Date().toISOString().slice(0,10), (err, poNumber) => {
+    if (err) return res.status(500).json({ error: err.message });
+    finish(poNumber, true);
+  });
+});
+
+app.put('/api/orders/:id', (req, res) => {
+  db.get(`SELECT * FROM orders WHERE id = ?`, [req.params.id], (findErr, existing) => {
+    if (findErr) return res.status(500).json({ error: findErr.message });
+    if (!existing) return res.status(404).json({ error: 'not found' });
+    const order = normalizeOrderPayload(Object.assign({}, req.body || {}, { id: req.params.id }), existing);
+    if (!order.poNumber) return res.status(400).json({ error: 'poNumber is required' });
+    if (!order.orderDate) return res.status(400).json({ error: 'orderDate is required' });
+    if (!order.vendorName) return res.status(400).json({ error: 'vendorName is required' });
+    db.run(`
+      UPDATE orders SET
+        poNumber = ?, generatedPoNumber = ?, clientName = ?, jobName = ?, orderDate = ?,
+        vendorName = ?, vendorContactName = ?, vendorEmail = ?, vendorPhone = ?,
+        orderedBy = ?, enteredBy = ?, status = ?, notes = ?, updatedAt = ?
+      WHERE id = ?
+    `, [
+      order.poNumber, order.generatedPoNumber, order.clientName, order.jobName, order.orderDate,
+      order.vendorName, order.vendorContactName, order.vendorEmail, order.vendorPhone,
+      order.orderedBy, order.enteredBy, order.status, order.notes, order.updatedAt, order.id
+    ], err => {
+      if (err) return res.status(400).json({ error: err.message });
+      updateOrderStatus(order.id, () => {
+        readOrder(order.id, (readErr, saved) => {
+          if (readErr) return res.status(500).json({ error: readErr.message });
+          res.json(saved);
+        });
+      });
+    });
+  });
+});
+
+function upsertOrderLine(body, orderId, res, statusCode){
+  const quantityOrdered = normalizeNumber(body.quantityOrdered);
+  if (!quantityOrdered || quantityOrdered <= 0) return res.status(400).json({ error: 'quantityOrdered must be positive' });
+  const description = String(body.description || '').trim();
+  if (!description) return res.status(400).json({ error: 'description is required' });
+  const lineTotal = typeof body.lineTotal !== 'undefined' ? normalizeNumber(body.lineTotal) : (() => {
+    const cost = normalizeNumber(body.unitCost);
+    return cost == null ? null : cost * quantityOrdered;
+  })();
+  const status = ORDER_LINE_STATUSES.has(body.status) ? body.status : 'pending';
+  db.run(`
+    INSERT INTO order_lines (
+      id, orderId, itemId, description, quantityOrdered, unit, vendorItemNumber,
+      manufacturerPartNumber, unitCost, lineTotal, status, notes, sortOrder
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      itemId = excluded.itemId,
+      description = excluded.description,
+      quantityOrdered = excluded.quantityOrdered,
+      unit = excluded.unit,
+      vendorItemNumber = excluded.vendorItemNumber,
+      manufacturerPartNumber = excluded.manufacturerPartNumber,
+      unitCost = excluded.unitCost,
+      lineTotal = excluded.lineTotal,
+      status = excluded.status,
+      notes = excluded.notes,
+      sortOrder = excluded.sortOrder
+  `, [
+    body.id || generateId(),
+    orderId,
+    body.itemId || null,
+    description,
+    quantityOrdered,
+    body.unit || null,
+    body.vendorItemNumber || null,
+    body.manufacturerPartNumber || null,
+    normalizeNumber(body.unitCost),
+    lineTotal,
+    status,
+    body.notes || null,
+    Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0
+  ], err => {
+    if (err) return res.status(400).json({ error: err.message });
+    updateOrderStatus(orderId, () => {
+      readOrder(orderId, (readErr, order) => {
+        if (readErr) return res.status(500).json({ error: readErr.message });
+        res.status(statusCode).json(order);
+      });
+    });
+  });
+}
+
+function createInventoryEventForReceipt(line, receipt, cb){
+  if (!line.itemId) return cb && cb(null);
+  const eventId = `order-receipt-${receipt.id}`;
+  db.run(
+    `INSERT OR IGNORE INTO events(id,itemId,type,qty,timestamp,sessionId,note,source,orderId,orderLineId,receiptId)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+    [
+      eventId,
+      line.itemId,
+      'DELTA',
+      receipt.quantityReceived,
+      receipt.createdAt,
+      null,
+      `Received on order ${receipt.orderId}`,
+      'order_receipt',
+      receipt.orderId,
+      receipt.orderLineId,
+      receipt.id
+    ],
+    err => cb && cb(err)
+  );
+}
+
+app.post('/api/orders/:id/lines', (req, res) => {
+  db.get(`SELECT id FROM orders WHERE id = ?`, [req.params.id], (err, order) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!order) return res.status(404).json({ error: 'order not found' });
+    upsertOrderLine(req.body || {}, req.params.id, res, 201);
+  });
+});
+
+app.put('/api/order-lines/:id', (req, res) => {
+  db.get(`SELECT * FROM order_lines WHERE id = ?`, [req.params.id], (err, existing) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!existing) return res.status(404).json({ error: 'not found' });
+    upsertOrderLine(Object.assign({}, existing, req.body || {}, { id: req.params.id }), existing.orderId, res, 200);
+  });
+});
+
+app.delete('/api/order-lines/:id', (req, res) => {
+  db.get(`SELECT * FROM order_lines WHERE id = ?`, [req.params.id], (err, existing) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!existing) return res.json({ deleted: 0 });
+    db.get(`SELECT COUNT(*) AS receiptCount FROM order_receipts WHERE orderLineId = ?`, [req.params.id], (countErr, row) => {
+      if (countErr) return res.status(500).json({ error: countErr.message });
+      if ((row && row.receiptCount) > 0) return res.status(400).json({ error: 'cannot delete a line with receipt history' });
+      db.run(`DELETE FROM order_lines WHERE id = ?`, [req.params.id], deleteErr => {
+        if (deleteErr) return res.status(500).json({ error: deleteErr.message });
+        updateOrderStatus(existing.orderId, () => res.json({ deleted: 1, orderId: existing.orderId }));
+      });
+    });
+  });
+});
+
+app.post('/api/order-lines/:id/receipts', (req, res) => {
+  db.get(`SELECT * FROM order_lines WHERE id = ?`, [req.params.id], (lineErr, line) => {
+    if (lineErr) return res.status(500).json({ error: lineErr.message });
+    if (!line) return res.status(404).json({ error: 'line not found' });
+    const qty = normalizeNumber(req.body && req.body.quantityReceived);
+    if (!qty || qty <= 0) return res.status(400).json({ error: 'quantityReceived must be positive' });
+    const id = (req.body && req.body.id) || generateId();
+    const receivedDate = (req.body && req.body.receivedDate) || new Date().toISOString().slice(0,10);
+    const createdAt = (req.body && req.body.createdAt) || new Date().toISOString();
+    const receipt = {
+      id,
+      orderId: line.orderId,
+      orderLineId: line.id,
+      quantityReceived: qty,
+      receivedDate,
+      receivedBy: (req.body && req.body.receivedBy) || null,
+      note: (req.body && req.body.note) || null,
+      createdAt
+    };
+    db.run(`
+      INSERT OR IGNORE INTO order_receipts (
+        id, orderId, orderLineId, quantityReceived, receivedDate, receivedBy, note, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      receipt.id, receipt.orderId, receipt.orderLineId, receipt.quantityReceived, receipt.receivedDate,
+      receipt.receivedBy, receipt.note, receipt.createdAt
+    ], err => {
+      if (err) return res.status(400).json({ error: err.message });
+      createInventoryEventForReceipt(line, receipt, eventErr => {
+        if (eventErr) return res.status(500).json({ error: eventErr.message });
+        updateOrderStatus(line.orderId, () => {
+          readOrder(line.orderId, (readErr, order) => {
+            if (readErr) return res.status(500).json({ error: readErr.message });
+            res.status(201).json(order);
+          });
+        });
+      });
+    });
+  });
+});
+
+app.get('/api/orders/:id/sheet', (req, res) => {
+  readOrder(req.params.id, (err, order) => {
+    if (err) return res.status(500).send(err.message);
+    if (!order) return res.status(404).send('not found');
+    res.type('html').send(renderOrderSheet(order));
+  });
+});
+
 // GET items
 app.get('/api/items', (req, res) => {
   db.all(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId FROM items ORDER BY label`, (err, rows) => {
@@ -100,14 +583,14 @@ app.post('/api/events', (req, res) => {
   const events = Array.isArray(req.body) ? req.body : [req.body];
   let inserted = 0;
   let ignored = 0;
-  const stmt = db.prepare(`INSERT OR IGNORE INTO events(id,itemId,type,qty,timestamp,sessionId,note,source) VALUES(?,?,?,?,?,?,?,?)`);
+  const stmt = db.prepare(`INSERT OR IGNORE INTO events(id,itemId,type,qty,timestamp,sessionId,note,source,orderId,orderLineId,receiptId) VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
   db.serialize(() => {
     events.forEach(ev => {
       try {
         // enforce allowed types
         const t = (ev.type||'').toUpperCase();
         if (t !== 'DELTA' && t !== 'COUNT') { ignored++; return; }
-        stmt.run(ev.id, ev.itemId, t, ev.qty, ev.timestamp, ev.sessionId || null, ev.note || null, ev.source || 'mobile', function(err) {
+        stmt.run(ev.id, ev.itemId, t, ev.qty, ev.timestamp, ev.sessionId || null, ev.note || null, ev.source || 'mobile', ev.orderId || null, ev.orderLineId || null, ev.receiptId || null, function(err) {
           if (err) ignored++;
           else {
             if (this.changes && this.changes > 0) inserted++;
@@ -180,7 +663,7 @@ app.get('/api/items/:id', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'not found' });
     db.all(
-      `SELECT id,company,contactName,contactEmail,onTimeScore,updatedAt
+      `SELECT id,company,contactName,contactEmail,contactPhone,onTimeScore,updatedAt
        FROM vendors
        ORDER BY company ASC`,
       [],
@@ -194,6 +677,7 @@ app.get('/api/items/:id', (req, res) => {
          v.company AS vendorCompany,
          v.contactName,
          v.contactEmail,
+         v.contactPhone,
          ivo.partNumber,
          ivo.price,
          ivo.shippingCost,
@@ -219,7 +703,7 @@ app.get('/api/items/:id', (req, res) => {
 // Get all vendors
 app.get('/api/vendors', (req, res) => {
   db.all(
-    `SELECT id,company,contactName,contactEmail,onTimeScore,updatedAt FROM vendors ORDER BY company ASC`,
+    `SELECT id,company,contactName,contactEmail,contactPhone,onTimeScore,updatedAt FROM vendors ORDER BY company ASC`,
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json(rows || []);
@@ -234,12 +718,12 @@ app.post('/api/vendors', (req, res) => {
   if (!company) return res.status(400).json({ error: 'company is required' });
   const now = new Date().toISOString();
   db.run(
-    `INSERT INTO vendors (company, contactName, contactEmail, onTimeScore, updatedAt) VALUES (?, ?, ?, ?, ?)`,
-    [company, body.contactName || null, body.contactEmail || null, (body.onTimeScore === null || body.onTimeScore === '' || typeof body.onTimeScore === 'undefined') ? null : Number(body.onTimeScore), now],
+    `INSERT INTO vendors (company, contactName, contactEmail, contactPhone, onTimeScore, updatedAt) VALUES (?, ?, ?, ?, ?, ?)`,
+    [company, body.contactName || null, body.contactEmail || null, body.contactPhone || null, (body.onTimeScore === null || body.onTimeScore === '' || typeof body.onTimeScore === 'undefined') ? null : Number(body.onTimeScore), now],
     function(err){
       if (err) return res.status(500).json({ error: err.message });
       db.get(
-        `SELECT id,company,contactName,contactEmail,onTimeScore,updatedAt FROM vendors WHERE id = ?`,
+        `SELECT id,company,contactName,contactEmail,contactPhone,onTimeScore,updatedAt FROM vendors WHERE id = ?`,
         [this.lastID],
         (readErr, row) => {
           if (readErr) return res.status(500).json({ error: readErr.message });
@@ -254,7 +738,7 @@ app.post('/api/vendors', (req, res) => {
 app.put('/api/vendors/:id', (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid vendor id' });
-  const { company, contactName, contactEmail, onTimeScore } = req.body || {};
+  const { company, contactName, contactEmail, contactPhone, onTimeScore } = req.body || {};
 
   const sets = [];
   const params = [];
@@ -262,6 +746,7 @@ app.put('/api/vendors/:id', (req, res) => {
   if (typeof company !== 'undefined') { sets.push('company = ?'); params.push(company); }
   if (typeof contactName !== 'undefined') { sets.push('contactName = ?'); params.push(contactName); }
   if (typeof contactEmail !== 'undefined') { sets.push('contactEmail = ?'); params.push(contactEmail); }
+  if (typeof contactPhone !== 'undefined') { sets.push('contactPhone = ?'); params.push(contactPhone); }
   if (typeof onTimeScore !== 'undefined') { sets.push('onTimeScore = ?'); params.push(onTimeScore === null || onTimeScore === '' ? null : Number(onTimeScore)); }
 
   if (sets.length === 0) return res.status(400).json({ error: 'no fields' });
@@ -274,7 +759,7 @@ app.put('/api/vendors/:id', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!this.changes) return res.status(404).json({ error: 'not found' });
     db.get(
-      `SELECT id,company,contactName,contactEmail,onTimeScore,updatedAt FROM vendors WHERE id = ?`,
+      `SELECT id,company,contactName,contactEmail,contactPhone,onTimeScore,updatedAt FROM vendors WHERE id = ?`,
       [id],
       (readErr, row) => {
         if (readErr) return res.status(500).json({ error: readErr.message });

@@ -10,24 +10,8 @@
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="manifest" href="/site.webmanifest" />
   <style>
-    :root{
-      --bg:#f4f6f8;
-      --fg:#0f172a;
-      --panel:#ffffff;
-      --border:#d8dee4;
-      --muted:#64748b;
-      --secondary:#e5e7eb;
-      --link:#111;
-    }
-    body[data-theme="dark"]{
-      --bg:#050505;
-      --fg:#eee;
-      --panel:#0f1115;
-      --border:#2b2f36;
-      --muted:#9aa4b2;
-      --secondary:#1b1f25;
-      --link:#e5e7eb;
-    }
+    :root{--bg:#f4f6f8;--fg:#0f172a;--panel:#ffffff;--border:#d8dee4;--muted:#64748b;--secondary:#e5e7eb;--link:#111}
+    body[data-theme="dark"]{--bg:#050505;--fg:#eee;--panel:#0f1115;--border:#2b2f36;--muted:#9aa4b2;--secondary:#1b1f25;--link:#e5e7eb}
     body{font-family:system-ui,Segoe UI,Roboto,Arial,Helvetica,sans-serif;margin:0;padding:16px;background:var(--bg);color:var(--fg)}
     h1{margin:0;font-size:1.5rem}
     .subtitle{margin:4px 0 0 0;color:var(--muted);font-size:0.95rem}
@@ -37,23 +21,12 @@
     .btnSecondary{background:var(--secondary);color:var(--link)}
     .btnNeutral{background:var(--panel);color:var(--link);border-color:var(--border)}
     #charts{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
-    .categoryChart{
-      border:1px solid var(--border);
-      border-radius:10px;
-      background:var(--panel);
-      width:min(100%, var(--chart-width, 420px));
-      flex:0 1 auto;
-    }
+    .categoryChart{border:1px solid var(--border);border-radius:10px;background:var(--panel);width:min(100%, var(--chart-width, 420px));flex:0 1 auto}
     .categoryChart summary{padding:10px 12px;cursor:pointer;font-weight:700;list-style:none}
     .categoryChart summary::-webkit-details-marker{display:none}
     .categoryChart summary::before{content:'v ';font-size:0.9rem}
     .categoryChart:not([open]) summary::before{content:'> '}
-    .chartWrap{
-      width:min(100%, var(--chart-width, 420px));
-      height:320px;
-      border-top:1px solid var(--border);
-      position:relative;
-    }
+    .chartWrap{width:min(100%, var(--chart-width, 420px));height:320px;border-top:1px solid var(--border);position:relative}
     canvas{width:100%;height:100%;display:block}
     .tooltip{position:absolute;background:#111;color:#fff;padding:6px;border-radius:6px;font-size:0.85rem;pointer-events:none;display:none}
     body[data-theme="dark"] .tooltip{background:#fff;color:#000}
@@ -76,6 +49,7 @@
     </div>
     <div class="topActions">
       <a href="/" class="btn btnSecondary">Home</a>
+      <a href="/orders.html" class="btn btnSecondary">Orders</a>
       <button id="themeToggle" class="btn btnNeutral">Dark</button>
     </div>
   </div>

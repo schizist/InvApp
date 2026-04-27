@@ -1,7 +1,7 @@
 // Minimal IndexedDB helper
 (function(global){
   const DB_NAME = 'invapp';
-  const DB_VERSION = 3;
+  const DB_VERSION = 4;
   let dbp = null;
 
   function open() {
@@ -20,6 +20,23 @@
         }
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta', { keyPath: 'key' });
+        }
+        if (!db.objectStoreNames.contains('orders')) {
+          const store = db.createObjectStore('orders', { keyPath: 'id' });
+          store.createIndex('updatedAt', 'updatedAt');
+          store.createIndex('poNumber', 'poNumber');
+        }
+        if (!db.objectStoreNames.contains('orderLines')) {
+          const store = db.createObjectStore('orderLines', { keyPath: 'id' });
+          store.createIndex('orderId', 'orderId');
+        }
+        if (!db.objectStoreNames.contains('orderReceipts')) {
+          const store = db.createObjectStore('orderReceipts', { keyPath: 'id' });
+          store.createIndex('orderId', 'orderId');
+          store.createIndex('orderLineId', 'orderLineId');
+        }
+        if (!db.objectStoreNames.contains('orderChanges')) {
+          db.createObjectStore('orderChanges', { keyPath: 'id' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -112,10 +129,100 @@
   async function resetAll() {
     const db = await open();
     return new Promise((res, rej) => {
-      const tx = db.transaction(['events', 'remoteEvents', 'meta'], 'readwrite');
+      const stores = ['events', 'remoteEvents', 'meta', 'orders', 'orderLines', 'orderReceipts', 'orderChanges'].filter(name => db.objectStoreNames.contains(name));
+      const tx = db.transaction(stores, 'readwrite');
       tx.objectStore('events').clear();
       tx.objectStore('remoteEvents').clear();
       tx.objectStore('meta').clear();
+      if (db.objectStoreNames.contains('orders')) tx.objectStore('orders').clear();
+      if (db.objectStoreNames.contains('orderLines')) tx.objectStore('orderLines').clear();
+      if (db.objectStoreNames.contains('orderReceipts')) tx.objectStore('orderReceipts').clear();
+      if (db.objectStoreNames.contains('orderChanges')) tx.objectStore('orderChanges').clear();
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  async function putStore(storeName, value){
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(storeName, 'readwrite');
+      tx.objectStore(storeName).put(value);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  async function getStoreAll(storeName){
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(storeName, 'readonly');
+      const req = tx.objectStore(storeName).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  async function getStore(storeName, id){
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(storeName, 'readonly');
+      const req = tx.objectStore(storeName).get(id);
+      req.onsuccess = () => res(req.result || null);
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  async function getByIndex(storeName, indexName, value){
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(storeName, 'readonly');
+      const req = tx.objectStore(storeName).index(indexName).getAll(value);
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  async function putOrder(order){ return putStore('orders', order); }
+  async function putOrderLine(line){ return putStore('orderLines', line); }
+  async function putOrderReceipt(receipt){ return putStore('orderReceipts', receipt); }
+  async function getOrders(){ return getStoreAll('orders'); }
+  async function getOrder(id){ return getStore('orders', id); }
+  async function getOrderLines(orderId){ return getByIndex('orderLines', 'orderId', orderId); }
+  async function getOrderReceipts(orderId){ return getByIndex('orderReceipts', 'orderId', orderId); }
+  async function queueOrderChange(change){ return putStore('orderChanges', change); }
+  async function getQueuedOrderChanges(){ return getStoreAll('orderChanges'); }
+  async function clearOrderChanges(ids){
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('orderChanges','readwrite');
+      const store = tx.objectStore('orderChanges');
+      ids.forEach(id => store.delete(id));
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  async function deleteOrderLine(id){
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('orderLines','readwrite');
+      tx.objectStore('orderLines').delete(id);
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+
+  async function storeOrderGraph(order){
+    if (!order || !order.id) return;
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(['orders', 'orderLines', 'orderReceipts'], 'readwrite');
+      tx.objectStore('orders').put(Object.assign({}, order, { lines: undefined, receipts: undefined, progress: order.progress || null }));
+      (order.lines || []).forEach(line => {
+        tx.objectStore('orderLines').put(Object.assign({}, line, { receipts: undefined }));
+        (line.receipts || []).forEach(receipt => tx.objectStore('orderReceipts').put(receipt));
+      });
       tx.oncomplete = () => res();
       tx.onerror = () => rej(tx.error);
     });
@@ -135,6 +242,18 @@
     getLastItems,
     setLastSyncTime,
     getLastSyncTime,
-    resetAll
+    resetAll,
+    putOrder,
+    putOrderLine,
+    putOrderReceipt,
+    getOrders,
+    getOrder,
+    getOrderLines,
+    getOrderReceipts,
+    deleteOrderLine,
+    queueOrderChange,
+    getQueuedOrderChanges,
+    clearOrderChanges,
+    storeOrderGraph
   };
 })(window);

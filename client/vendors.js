@@ -55,6 +55,7 @@
         <div class="viewMode">
           <div class="muted">Contact: ${escapeHtml(v.contactName || '-')}</div>
           <div class="muted">Email: ${escapeHtml(v.contactEmail || '-')}</div>
+          <div class="muted">Phone: ${escapeHtml(v.contactPhone || '-')}</div>
           <div class="muted">On-Time Score: ${v.onTimeScore == null ? '-' : `${escapeHtml(v.onTimeScore)}%`}</div>
         </div>
         <div class="editMode" style="display:none">
@@ -70,6 +71,10 @@
             <div class="field">
               <label>Email</label>
               <input class="emailInput" value="${escapeHtml(v.contactEmail || '')}" />
+            </div>
+            <div class="field">
+              <label>Phone</label>
+              <input class="phoneInput" value="${escapeHtml(v.contactPhone || '')}" />
             </div>
             <div class="field">
               <label>On-Time Score (%)</label>
@@ -88,6 +93,7 @@
       const companyInput = card.querySelector('.companyInput');
       const contactInput = card.querySelector('.contactInput');
       const emailInput = card.querySelector('.emailInput');
+      const phoneInput = card.querySelector('.phoneInput');
       const scoreInput = card.querySelector('.scoreInput');
 
       function setEditing(isEditing){
@@ -104,6 +110,7 @@
         companyInput.value = v.company || '';
         contactInput.value = v.contactName || '';
         emailInput.value = v.contactEmail || '';
+        phoneInput.value = v.contactPhone || '';
         scoreInput.value = v.onTimeScore == null ? '' : String(v.onTimeScore);
         setEditing(false);
       });
@@ -116,6 +123,7 @@
         }
         const contactName = (contactInput.value || '').trim();
         const contactEmail = (emailInput.value || '').trim();
+        const contactPhone = (phoneInput.value || '').trim();
         const onTimeScoreRaw = (scoreInput.value || '').trim();
         const res = await fetch('/api/vendors/' + encodeURIComponent(v.id), {
           method: 'PUT',
@@ -124,6 +132,7 @@
             company,
             contactName: contactName || null,
             contactEmail: contactEmail || null,
+            contactPhone: contactPhone || null,
             onTimeScore: onTimeScoreRaw === '' ? null : Number(onTimeScoreRaw)
           })
         });
@@ -154,6 +163,7 @@
     const company = (el('newCompany').value || '').trim();
     const contactName = (el('newContactName').value || '').trim();
     const contactEmail = (el('newContactEmail').value || '').trim();
+    const contactPhone = (el('newContactPhone').value || '').trim();
     const onTimeScore = (el('newOnTimeScore').value || '').trim();
     if (!company){
       alert('Company is required.');
@@ -166,6 +176,7 @@
         company,
         contactName: contactName || null,
         contactEmail: contactEmail || null,
+        contactPhone: contactPhone || null,
         onTimeScore: onTimeScore === '' ? null : Number(onTimeScore)
       })
     });
@@ -177,6 +188,7 @@
     el('newCompany').value = '';
     el('newContactName').value = '';
     el('newContactEmail').value = '';
+    el('newContactPhone').value = '';
     el('newOnTimeScore').value = '';
     await render();
   }

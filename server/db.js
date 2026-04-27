@@ -116,9 +116,18 @@ function initializeSchema(dbConn){
         timestamp TEXT NOT NULL,
         sessionId TEXT,
         note TEXT,
-        source TEXT
+        source TEXT,
+        orderId TEXT,
+        orderLineId TEXT,
+        receiptId TEXT
       )
     `);
+
+    ensureColumns(dbConn, 'events', [
+      `ALTER TABLE events ADD COLUMN orderId TEXT`,
+      `ALTER TABLE events ADD COLUMN orderLineId TEXT`,
+      `ALTER TABLE events ADD COLUMN receiptId TEXT`
+    ]);
 
     dbConn.run(`
       CREATE TABLE IF NOT EXISTS vendor_options (
@@ -144,12 +153,14 @@ function initializeSchema(dbConn){
         company TEXT NOT NULL UNIQUE,
         contactName TEXT,
         contactEmail TEXT,
+        contactPhone TEXT,
         onTimeScore REAL,
         updatedAt TEXT NOT NULL
       )
     `);
 
     ensureColumns(dbConn, 'vendors', [
+      `ALTER TABLE vendors ADD COLUMN contactPhone TEXT`,
       `ALTER TABLE vendors ADD COLUMN onTimeScore REAL`
     ]);
 
@@ -168,6 +179,76 @@ function initializeSchema(dbConn){
         UNIQUE(itemId, vendorId)
       )
     `);
+
+    dbConn.run(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id TEXT PRIMARY KEY,
+        poNumber TEXT NOT NULL UNIQUE,
+        generatedPoNumber INTEGER DEFAULT 0,
+        clientName TEXT,
+        jobName TEXT,
+        orderDate TEXT NOT NULL,
+        vendorName TEXT NOT NULL,
+        vendorContactName TEXT,
+        vendorEmail TEXT,
+        vendorPhone TEXT,
+        orderedBy TEXT,
+        enteredBy TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        notes TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    `);
+
+    dbConn.run(`
+      CREATE TABLE IF NOT EXISTS order_lines (
+        id TEXT PRIMARY KEY,
+        orderId TEXT NOT NULL,
+        itemId TEXT,
+        description TEXT NOT NULL,
+        quantityOrdered REAL NOT NULL,
+        unit TEXT,
+        vendorItemNumber TEXT,
+        manufacturerPartNumber TEXT,
+        unitCost REAL,
+        lineTotal REAL,
+        status TEXT DEFAULT 'pending',
+        notes TEXT,
+        sortOrder INTEGER DEFAULT 0
+      )
+    `);
+
+    dbConn.run(`
+      CREATE TABLE IF NOT EXISTS order_receipts (
+        id TEXT PRIMARY KEY,
+        orderId TEXT NOT NULL,
+        orderLineId TEXT NOT NULL,
+        quantityReceived REAL NOT NULL,
+        receivedDate TEXT NOT NULL,
+        receivedBy TEXT,
+        note TEXT,
+        createdAt TEXT NOT NULL
+      )
+    `);
+
+    ensureColumns(dbConn, 'orders', [
+      `ALTER TABLE orders ADD COLUMN vendorContactName TEXT`,
+      `ALTER TABLE orders ADD COLUMN vendorEmail TEXT`,
+      `ALTER TABLE orders ADD COLUMN vendorPhone TEXT`
+    ]);
+
+    ensureColumns(dbConn, 'order_lines', [
+      `ALTER TABLE order_lines ADD COLUMN vendorItemNumber TEXT`,
+      `ALTER TABLE order_lines ADD COLUMN manufacturerPartNumber TEXT`,
+      `ALTER TABLE order_lines ADD COLUMN lineTotal REAL`,
+      `ALTER TABLE order_lines ADD COLUMN status TEXT DEFAULT 'pending'`,
+      `ALTER TABLE order_lines ADD COLUMN notes TEXT`
+    ]);
+
+    ensureColumns(dbConn, 'vendor_options', [
+      `ALTER TABLE vendor_options ADD COLUMN contactPhone TEXT`
+    ]);
 
     const items = [
       ['mold_100','M-100','mold'],
@@ -250,28 +331,31 @@ function initializeSchema(dbConn){
 
     const now = new Date().toISOString();
     const baseVendors = [
-      { company: 'Core Supply Co.', contactName: 'Jordan Rivera', contactEmail: 'jordan.rivera@coresupply.example', onTimeScore: 96 },
-      { company: 'Alt Source Manufacturing', contactName: 'Sam Patel', contactEmail: 'sam.patel@altsource.example', onTimeScore: 91 }
+      { company: 'Core Supply Co.', contactName: 'Jordan Rivera', contactEmail: 'jordan.rivera@coresupply.example', contactPhone: '+1-555-0100', onTimeScore: 96 },
+      { company: 'Alt Source Manufacturing', contactName: 'Sam Patel', contactEmail: 'sam.patel@altsource.example', contactPhone: '+1-555-0199', onTimeScore: 91 }
     ];
 
     const vendorSeedStmt = dbConn.prepare(`
-      INSERT OR IGNORE INTO vendors (company, contactName, contactEmail, updatedAt)
-      VALUES (?, ?, ?, ?)
+      INSERT OR IGNORE INTO vendors (company, contactName, contactEmail, contactPhone, updatedAt)
+      VALUES (?, ?, ?, ?, ?)
     `);
-    baseVendors.forEach(v => vendorSeedStmt.run(v.company, v.contactName, v.contactEmail, now));
+    baseVendors.forEach(v => vendorSeedStmt.run(v.company, v.contactName, v.contactEmail, v.contactPhone, now));
     vendorSeedStmt.finalize();
 
     dbConn.run(`
-      INSERT OR IGNORE INTO vendors (company, contactName, contactEmail, updatedAt)
-      SELECT vendorCompany, MAX(contactName), MAX(contactEmail), COALESCE(MAX(updatedAt), ?)
+      INSERT OR IGNORE INTO vendors (company, contactName, contactEmail, contactPhone, updatedAt)
+      SELECT vendorCompany, MAX(contactName), MAX(contactEmail), MAX(contactPhone), COALESCE(MAX(updatedAt), ?)
       FROM vendor_options
       GROUP BY vendorCompany
     `, [now]);
 
     baseVendors.forEach(v => {
       dbConn.run(
-        `UPDATE vendors SET onTimeScore = COALESCE(onTimeScore, ?) WHERE company = ?`,
-        [v.onTimeScore, v.company],
+        `UPDATE vendors
+         SET onTimeScore = COALESCE(onTimeScore, ?),
+             contactPhone = COALESCE(contactPhone, ?)
+         WHERE company = ?`,
+        [v.onTimeScore, v.contactPhone, v.company],
         err => { if (err) console.warn('Failed to set default vendor onTimeScore:', err.message); }
       );
     });

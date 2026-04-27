@@ -3,6 +3,9 @@
   function el(id){ return document.getElementById(id); }
   const themeToggle = () => el('themeToggle');
   const selectedVendorByItem = {};
+  let canvas, tooltip;
+  let lastSeries = [];
+  const DPR = window.devicePixelRatio || 1;
 
   function applyTheme(t){
     const next = t === 'dark' ? 'dark' : 'light';
@@ -15,8 +18,32 @@
 
   function parseDateInput(v, endOfDay){
     if (!v) return null;
-    if (endOfDay) return new Date(v + 'T23:59:59.999');
-    return new Date(v + 'T00:00:00.000');
+    return new Date(v + (endOfDay ? 'T23:59:59.999' : 'T00:00:00.000'));
+  }
+
+  function formatDate(d){ return d.toISOString().slice(0,10); }
+
+  function escapeHtml(text){
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function normalizeNumberInput(value){
+    if (value == null) return null;
+    const trimmed = String(value).trim();
+    if (!trimmed) return null;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function currency(v){
+    const n = Number(v);
+    if (Number.isNaN(n)) return '-';
+    return `$${n.toFixed(2)}`;
   }
 
   async function getLocalHistory(itemId, fromDate, toDate){
@@ -50,18 +77,16 @@
       items = await IDB.getLastItems() || bundledItems;
     }
     const sel = el('item');
-    sel.innerHTML='';
-    items.forEach(it=>{
-      const o=document.createElement('option');
-      o.value=it.id;
-      o.textContent=it.label;
+    sel.innerHTML = '';
+    items.forEach(it => {
+      const o = document.createElement('option');
+      o.value = it.id;
+      o.textContent = it.label;
       if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) o.dataset.reorder = String(it.reorderLevel);
       if (typeof it.salePrice !== 'undefined' && it.salePrice !== null) o.dataset.salePrice = String(it.salePrice);
       sel.appendChild(o);
     });
   }
-
-  function formatDate(d){ return d.toISOString().slice(0,10); }
 
   function moveItemSelection(direction){
     const sel = el('item');
@@ -70,27 +95,15 @@
     const next = current + direction;
     if (next < 0 || next >= sel.options.length) return;
     sel.selectedIndex = next;
-    const opt = sel.options[sel.selectedIndex];
-    el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
-    el('salePriceInput').value = opt && opt.dataset && opt.dataset.salePrice ? opt.dataset.salePrice : '';
+    syncSelectedItemInputs();
     show();
   }
 
-  function escapeHtml(text){
-    return String(text == null ? '' : text)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  function normalizeNumberInput(value){
-    if (value == null) return null;
-    const trimmed = String(value).trim();
-    if (!trimmed) return null;
-    const n = Number(trimmed);
-    return Number.isFinite(n) ? n : null;
+  function syncSelectedItemInputs(){
+    const sel = el('item');
+    const opt = sel && sel.options[sel.selectedIndex];
+    el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
+    el('salePriceInput').value = opt && opt.dataset && opt.dataset.salePrice ? opt.dataset.salePrice : '';
   }
 
   function setSelectedItemSalePrice(value){
@@ -105,7 +118,7 @@
   function buildDailyLevelSeries(events, startDate, endDate){
     const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(), 0, 0, 0, 0);
     const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
-    const sorted = (events || []).slice().sort((a,b)=> (a.timestamp || '').localeCompare(b.timestamp || ''));
+    const sorted = (events || []).slice().sort((a,b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
     let qty = 0;
     let idx = 0;
     const out = [];
@@ -119,23 +132,55 @@
         else if (ev.type === 'DELTA') qty += (Number(ev.qty) || 0);
         idx++;
       }
-      out.push({
-        date: new Date(d).toISOString().slice(0,10),
-        qty,
-        ts: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0)
-      });
+      out.push({ date: new Date(d).toISOString().slice(0,10), qty, ts: new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0) });
     }
     return out;
+  }
+
+  function fillVendorFields(v){
+    const contact = el('vendorContact');
+    const emails = el('vendorEmails');
+    const phone = el('vendorPhone');
+    if (contact) contact.value = v && v.contactName ? v.contactName : '';
+    if (emails) emails.value = v && v.contactEmail ? v.contactEmail : '';
+    if (phone) phone.value = v && v.contactPhone ? v.contactPhone : '';
+  }
+
+  function renderOrderVendors(item){
+    const select = el('orderedFrom');
+    if (!select) return;
+    const vendors = item && item.vendorList && item.vendorList.length ? item.vendorList : [];
+    select.innerHTML = '';
+    if (!vendors.length){
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = 'No vendors available';
+      select.appendChild(o);
+      fillVendorFields(null);
+      return;
+    }
+    vendors.forEach(v => {
+      const o = document.createElement('option');
+      o.value = String(v.id);
+      o.textContent = v.company || 'Vendor';
+      select.appendChild(o);
+    });
+    const selectedId = item.primaryVendorId || vendors[0].id;
+    select.value = String(selectedId);
+    const fillSelected = () => {
+      const vendor = vendors.find(v => String(v.id) === String(select.value));
+      fillVendorFields(vendor || null);
+    };
+    select.onchange = fillSelected;
+    fillSelected();
   }
 
   function renderVendors(item){
     const wrap = el('vendors');
     if (!wrap) return;
     wrap.innerHTML = '';
-
     const vendorList = (item && item.vendorList) ? item.vendorList : [];
     const vendorOptions = (item && item.vendors) ? item.vendors : [];
-
     if (!vendorList.length){
       const empty = document.createElement('div');
       empty.className = 'vendorEmpty';
@@ -167,13 +212,20 @@
           <dl class="vendorGrid" style="margin-bottom:10px">
             <dt>Contact</dt><dd>${escapeHtml((vendor && vendor.contactName) || '-')}</dd>
             <dt>Email</dt><dd>${vendor && vendor.contactEmail ? `<a href="mailto:${escapeHtml(vendor.contactEmail)}">${escapeHtml(vendor.contactEmail)}</a>` : '-'}</dd>
+            <dt>Phone</dt><dd>${escapeHtml((vendor && vendor.contactPhone) || '-')}</dd>
             <dt>On-Time</dt><dd>${vendor && vendor.onTimeScore != null ? `${escapeHtml(vendor.onTimeScore)}%` : '-'}</dd>
+            <dt>Part Number</dt><dd>${escapeHtml(option.partNumber || '-')}</dd>
+            <dt>Price</dt><dd>${currency(option.price)}</dd>
+            <dt>Shipping</dt><dd>${currency(option.shippingCost)}</dd>
+            <dt>MOQ</dt><dd>${option.moq ?? '-'}</dd>
+            <dt>Lead Time</dt><dd>${option.leadTimeDays != null ? `${escapeHtml(option.leadTimeDays)} days` : '-'}</dd>
           </dl>
           <div class="vendorGrid">
             <label for="${optionPrefix}Part">Part Number</label><input id="${optionPrefix}Part" value="${escapeHtml(option.partNumber || '')}" />
             <label for="${optionPrefix}Price">Order Price</label><input id="${optionPrefix}Price" type="number" step="0.01" value="${escapeHtml(option.price ?? '')}" />
             <label for="${optionPrefix}Ship">Shipping</label><input id="${optionPrefix}Ship" type="number" step="0.01" value="${escapeHtml(option.shippingCost ?? '')}" />
             <label for="${optionPrefix}Moq">MOQ</label><input id="${optionPrefix}Moq" type="number" step="1" value="${escapeHtml(option.moq ?? '')}" />
+            <label for="${optionPrefix}Lead">Lead Time</label><input id="${optionPrefix}Lead" type="number" step="1" value="${escapeHtml(option.leadTimeDays ?? '')}" />
           </div>
           <div style="margin-top:10px"><button type="button" id="${optionPrefix}Save" class="btn" style="background:#0b5ed7;color:#fff">Save ${label}</button></div>
         </div>
@@ -192,11 +244,10 @@
         partNumber: (wrap.querySelector(`#${prefix}Part`).value || '').trim() || null,
         price: normalizeNumberInput(wrap.querySelector(`#${prefix}Price`).value),
         shippingCost: normalizeNumberInput(wrap.querySelector(`#${prefix}Ship`).value),
-        moq: normalizeNumberInput(wrap.querySelector(`#${prefix}Moq`).value)
+        moq: normalizeNumberInput(wrap.querySelector(`#${prefix}Moq`).value),
+        leadTimeDays: normalizeNumberInput(wrap.querySelector(`#${prefix}Lead`).value)
       };
-      const itemPayload = slotName === 'primary'
-        ? { primaryVendorId: Number(vendorId) }
-        : { altVendorId: Number(vendorId) };
+      const itemPayload = slotName === 'primary' ? { primaryVendorId: Number(vendorId) } : { altVendorId: Number(vendorId) };
       const itemRes = await fetch('/api/items/' + encodeURIComponent(itemId), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -211,11 +262,11 @@
       if (!optionRes.ok) throw new Error('failed to save item vendor values');
     };
 
-    wrap.querySelector('#primaryPicker').addEventListener('change', (ev) => {
+    wrap.querySelector('#primaryPicker').addEventListener('change', ev => {
       selectedVendorByItem[itemId].primary = ev.target.value;
       renderVendors(item);
     });
-    wrap.querySelector('#altPicker').addEventListener('change', (ev) => {
+    wrap.querySelector('#altPicker').addEventListener('change', ev => {
       selectedVendorByItem[itemId].alt = ev.target.value;
       renderVendors(item);
     });
@@ -232,17 +283,19 @@
   async function show(){
     const id = el('item').value;
     if (!id) return;
-
     try {
       const itemRes = await fetch('/api/items/' + encodeURIComponent(id));
       if (itemRes.ok) {
         const item = await itemRes.json();
         if (Object.prototype.hasOwnProperty.call(item, 'salePrice')) setSelectedItemSalePrice(item.salePrice);
+        renderOrderVendors(item);
         renderVendors(item);
       } else {
+        renderOrderVendors({ id, vendorList: [] });
         renderVendors({ id, vendors: [], vendorList: [] });
       }
     } catch (e) {
+      renderOrderVendors({ id, vendorList: [] });
       renderVendors({ id, vendors: [], vendorList: [] });
     }
 
@@ -272,13 +325,8 @@
       return s;
     })();
     const start = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0, 0);
-
     const points = (serverSeries && serverSeries.length > 0)
-      ? serverSeries.map(s => ({
-          date: s.date,
-          qty: Number(s.qty) || 0,
-          ts: new Date(`${s.date}T12:00:00`)
-        }))
+      ? serverSeries.map(s => ({ date: s.date, qty: Number(s.qty) || 0, ts: new Date(`${s.date}T12:00:00`) }))
       : buildDailyLevelSeries(events, start, end);
 
     if (!points || points.length === 0){
@@ -286,26 +334,23 @@
       renderEvents(events || []);
       return;
     }
-
     drawCountSeries(points, start, end);
     renderEvents(events || []);
   }
 
   function renderEvents(events){
     const out = el('events');
-    out.innerHTML='';
-    events.forEach(e=>{
+    out.innerHTML = '';
+    events.forEach(e => {
       const d = document.createElement('div');
       d.textContent = `${new Date(e.timestamp).toLocaleString()} | ${e.type} ${e.qty}${e.note ? (' | ' + e.note) : ''}${e.sessionId ? (' session:' + e.sessionId.slice(0,8)) : ''}`;
       out.appendChild(d);
     });
   }
 
-  let canvas, tooltip;
-  const DPR = window.devicePixelRatio || 1;
   function resizeCanvas(){
     const wrap = el('chartWrap');
-    if (!canvas) return;
+    if (!canvas || !wrap) return;
     const rect = wrap.getBoundingClientRect();
     canvas.width = Math.floor(rect.width * DPR);
     canvas.height = Math.floor(rect.height * DPR);
@@ -313,80 +358,89 @@
     canvas.style.height = rect.height + 'px';
   }
 
-  window.addEventListener('resize', ()=>{ resizeCanvas(); if (lastSeries) drawSeries(lastSeries); });
+  window.addEventListener('resize', () => { resizeCanvas(); if (lastSeries && lastSeries.length) drawSeries(lastSeries); });
 
-  let lastSeries = [];
   function drawSeries(series){
+    if (!series || !series.length) return;
     lastSeries = series;
-    resizeCanvas();
-    const dark = document.body.getAttribute('data-theme') === 'dark';
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    if (!series || series.length===0) return;
-    const pad = 40 * DPR;
-    const w = canvas.width; const h = canvas.height;
-    const areaW = w - pad*2; const areaH = h - pad*2;
-    const vals = series.map(s=>s.qty);
-    const minV = Math.min(...vals, 0); const maxV = Math.max(...vals, 1);
-    const vRange = (maxV - minV) || 1;
-    const barW = areaW / series.length * 0.8;
-    ctx.strokeStyle = dark ? '#3a3a3a' : '#e6e6e6'; ctx.lineWidth = 1 * DPR;
-    ctx.beginPath();
-    for (let i=0;i<=4;i++){ const yy = pad + (i/4)*areaH; ctx.moveTo(pad, yy); ctx.lineTo(pad+areaW, yy); }
-    ctx.stroke();
-    series.forEach((s,i)=>{
-      const x = pad + i * (areaW / series.length) + (areaW/series.length - barW)/2;
-      const y = pad + (1 - (s.qty - minV)/vRange) * areaH;
-      const bh = pad + areaH - y;
-      ctx.fillStyle = '#1976d2';
-      ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(barW), Math.floor(bh));
-    });
-    ctx.fillStyle = dark ? '#e0e0e0' : '#333'; ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign='center';
-    series.forEach((s,i)=>{ const x = pad + i * (areaW / series.length) + (areaW/series.length)/2; ctx.fillText(s.date, x, h - pad/2); });
-    try{
-      const sel = el('item'); const opt = sel && sel.options[sel.selectedIndex];
-      const rl = opt && opt.dataset && opt.dataset.reorder ? parseFloat(opt.dataset.reorder) : null;
-      if (rl !== null && !Number.isNaN(rl)){
-        const y = pad + (1 - (rl - minV)/vRange) * areaH;
-        ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2*DPR; ctx.setLineDash([6*DPR,4*DPR]);
-        ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad+areaW, y); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#c62828'; ctx.font = `${11*DPR}px sans-serif`; ctx.textAlign='right'; ctx.fillText('Reorder: ' + rl, pad+areaW-6*DPR, y - 6*DPR);
-      }
-    }catch(e){}
+    drawCountSeries(series.map(s => ({ date: s.date, qty: s.qty, ts: s.ts || new Date(`${s.date}T12:00:00`) })), new Date(series[0].date), new Date(series[series.length - 1].date));
   }
 
   function drawCountSeries(points, start, end){
-    lastSeries = points.map(p=>({ date: p.date, qty: p.qty, ts: p.ts }));
+    lastSeries = points.map(p => ({ date: p.date, qty: p.qty, ts: p.ts }));
     resizeCanvas();
     const dark = document.body.getAttribute('data-theme') === 'dark';
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    if (!points || points.length===0) return;
-    const pad = 40 * DPR; const w = canvas.width; const h = canvas.height; const areaW = w - pad*2; const areaH = h - pad*2;
-    const vals = points.map(p=>p.qty); const minV = Math.min(...vals, 0); const maxV = Math.max(...vals, 1); const vRange = (maxV - minV) || 1;
-    ctx.strokeStyle = dark ? '#3a3a3a' : '#e6e6e6'; ctx.lineWidth = 1*DPR; ctx.beginPath();
-    for (let i=0;i<=4;i++){ const yy = pad + (i/4)*areaH; ctx.moveTo(pad, yy); ctx.lineTo(pad+areaW, yy); }
+    if (!points || points.length === 0) return;
+    const pad = 40 * DPR;
+    const w = canvas.width;
+    const h = canvas.height;
+    const areaW = w - pad * 2;
+    const areaH = h - pad * 2;
+    const vals = points.map(p => p.qty);
+    const minV = Math.min(...vals, 0);
+    const maxV = Math.max(...vals, 1);
+    const vRange = (maxV - minV) || 1;
+    const endTime = end.getTime() === start.getTime() ? start.getTime() + 1 : end.getTime();
+    const mapX = ts => pad + ((ts.getTime() - start.getTime()) / (endTime - start.getTime())) * areaW;
+    const mapY = v => pad + (1 - (v - minV) / vRange) * areaH;
+    ctx.strokeStyle = dark ? '#3a3a3a' : '#e6e6e6';
+    ctx.lineWidth = 1 * DPR;
+    ctx.beginPath();
+    for (let i = 0; i <= 4; i++){
+      const yy = pad + (i / 4) * areaH;
+      ctx.moveTo(pad, yy);
+      ctx.lineTo(pad + areaW, yy);
+    }
     ctx.stroke();
-    const mapX = (ts) => pad + ((ts.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * areaW;
-    const mapY = (v) => pad + (1 - (v - minV)/vRange) * areaH;
-    ctx.beginPath(); ctx.strokeStyle = '#1976d2'; ctx.lineWidth = 2*DPR;
-    points.forEach((p,i)=>{ const x=mapX(p.ts); const y=mapY(p.qty); if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+    ctx.beginPath();
+    ctx.strokeStyle = '#1976d2';
+    ctx.lineWidth = 2 * DPR;
+    points.forEach((p,i) => {
+      const x = mapX(p.ts);
+      const y = mapY(p.qty);
+      if (i === 0) ctx.moveTo(x,y);
+      else ctx.lineTo(x,y);
+    });
     ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1976d2';
-    points.forEach(p=>{ const x=mapX(p.ts); const y=mapY(p.qty); ctx.beginPath(); ctx.arc(x,y,4*DPR,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
-    ctx.fillStyle = dark ? '#e0e0e0' : '#333'; ctx.font = `${12*DPR}px sans-serif`; ctx.textAlign = 'center';
-    for (let m=0;m<12;m++){
-      const dt = new Date(start.getFullYear(), start.getMonth()+m, 1);
-      const x = pad + ((dt.getTime() - start.getTime())/(end.getTime()-start.getTime()))*areaW;
-      const label = dt.toLocaleString(undefined,{month:'short'});
-      ctx.fillText(label, x, h - pad/2);
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#1976d2';
+    points.forEach(p => {
+      const x = mapX(p.ts);
+      const y = mapY(p.qty);
+      ctx.beginPath();
+      ctx.arc(x,y,4 * DPR,0,Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    ctx.fillStyle = dark ? '#e0e0e0' : '#333';
+    ctx.font = `${12 * DPR}px sans-serif`;
+    ctx.textAlign = 'center';
+    for (let m = 0; m < 12; m++){
+      const dt = new Date(start.getFullYear(), start.getMonth() + m, 1);
+      const x = pad + ((dt.getTime() - start.getTime()) / (endTime - start.getTime())) * areaW;
+      const label = dt.toLocaleString(undefined,{ month:'short' });
+      ctx.fillText(label, x, h - pad / 2);
     }
     try{
-      const sel = el('item'); const opt = sel && sel.options[sel.selectedIndex]; const rl = opt && opt.dataset && opt.dataset.reorder ? parseFloat(opt.dataset.reorder) : null;
+      const sel = el('item');
+      const opt = sel && sel.options[sel.selectedIndex];
+      const rl = opt && opt.dataset && opt.dataset.reorder ? parseFloat(opt.dataset.reorder) : null;
       if (rl !== null && !Number.isNaN(rl)){
         const y = mapY(rl);
-        ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2*DPR; ctx.setLineDash([6*DPR,4*DPR]); ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad+areaW, y); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#c62828'; ctx.font = `${11*DPR}px sans-serif`; ctx.textAlign='right'; ctx.fillText('Reorder: ' + rl, pad+areaW-6*DPR, y - 6*DPR);
+        ctx.strokeStyle = '#c62828';
+        ctx.lineWidth = 2 * DPR;
+        ctx.setLineDash([6 * DPR,4 * DPR]);
+        ctx.beginPath();
+        ctx.moveTo(pad, y);
+        ctx.lineTo(pad + areaW, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#c62828';
+        ctx.font = `${11 * DPR}px sans-serif`;
+        ctx.textAlign = 'right';
+        ctx.fillText('Reorder: ' + rl, pad + areaW - 6 * DPR, y - 6 * DPR);
       }
     }catch(e){}
   }
@@ -396,57 +450,60 @@
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = document.body.getAttribute('data-theme') === 'dark' ? '#bbb' : '#666';
-    ctx.font = `${14*DPR}px sans-serif`;
+    ctx.font = `${14 * DPR}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.fillText('No count events in selected range', canvas.width / 2, canvas.height / 2);
   }
 
   function posToNearest(evt){
-    if (!lastSeries || lastSeries.length===0) return null;
+    if (!lastSeries || lastSeries.length === 0) return null;
     const rect = canvas.getBoundingClientRect();
     const x = (evt.clientX - rect.left) * DPR;
-    const pad = 40 * DPR; const areaW = canvas.width - pad*2;
-    let nearest = null; let nd = Infinity;
-    for (let i=0;i<lastSeries.length;i++){
+    const pad = 40 * DPR;
+    const areaW = canvas.width - pad * 2;
+    let nearest = null;
+    let nd = Infinity;
+    const minT = new Date(lastSeries[0].date).getTime();
+    const maxT = new Date(lastSeries[lastSeries.length - 1].date).getTime() || minT + 1;
+    for (let i = 0; i < lastSeries.length; i++){
       const t = new Date(lastSeries[i].date).getTime();
-      const minT = new Date(lastSeries[0].date).getTime();
-      const maxT = new Date(lastSeries[lastSeries.length-1].date).getTime() || minT + 1;
-      const px = pad + ((t-minT)/(maxT-minT || 1))*areaW;
+      const px = pad + ((t - minT) / (maxT - minT || 1)) * areaW;
       const d = Math.abs(px - x);
-      if (d < nd){ nd = d; nearest = {i, px}; }
+      if (d < nd){ nd = d; nearest = { i, px }; }
     }
     return nearest;
   }
 
   function attachCanvasEvents(){
     if (!canvas) return;
-    canvas.addEventListener('mousemove', (ev)=>{
-      const n = posToNearest(ev); if (!n) { tooltip.style.display='none'; return; }
-      const s = lastSeries[n.i]; if (!s) { tooltip.style.display='none'; return; }
-      tooltip.style.display='block'; tooltip.textContent = `${s.date}: ${s.qty}`;
-      tooltip.style.left = (n.px / DPR) + 'px'; tooltip.style.top = '8px';
+    canvas.addEventListener('mousemove', ev => {
+      const n = posToNearest(ev);
+      if (!n){ tooltip.style.display = 'none'; return; }
+      const s = lastSeries[n.i];
+      if (!s){ tooltip.style.display = 'none'; return; }
+      tooltip.style.display = 'block';
+      tooltip.textContent = `${s.date}: ${s.qty}`;
+      tooltip.style.left = (n.px / DPR) + 'px';
+      tooltip.style.top = '8px';
     });
-    canvas.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; });
+    canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
   }
 
   window.load = async function(){
     await loadItems();
     const params = qs();
-    if (params.itemId){ el('item').value = params.itemId; }
+    if (params.itemId) el('item').value = params.itemId;
     const today = new Date();
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
-    start.setMonth(start.getMonth()-11);
+    start.setMonth(start.getMonth() - 11);
     el('to').value = formatDate(today);
     el('from').value = formatDate(start);
-    const sel = el('item');
-    const opt = sel && sel.options[sel.selectedIndex];
-    el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
-    el('salePriceInput').value = opt && opt.dataset && opt.dataset.salePrice ? opt.dataset.salePrice : '';
+    syncSelectedItemInputs();
     await show();
   };
   window.show = show;
 
-  window.addEventListener('DOMContentLoaded', ()=>{
+  window.addEventListener('DOMContentLoaded', () => {
     canvas = el('chartCanvas');
     tooltip = el('tooltip');
     attachCanvasEvents();
@@ -455,19 +512,24 @@
     const saved = localStorage.getItem('invapp.theme');
     applyTheme(saved === 'dark' ? 'dark' : 'light');
     const themeBtn = themeToggle();
-    if (themeBtn){ themeBtn.addEventListener('click', ()=>{ const cur = document.body.getAttribute('data-theme'); applyTheme(cur === 'dark' ? 'light' : 'dark'); }); }
+    if (themeBtn) themeBtn.addEventListener('click', () => {
+      const cur = document.body.getAttribute('data-theme');
+      applyTheme(cur === 'dark' ? 'light' : 'dark');
+    });
     const saveBtn = el('saveReorder');
     if (saveBtn){
-      saveBtn.addEventListener('click', async ()=>{
-        const sel = el('item'); const id = sel.value; const val = el('reorderInput').value; const salePrice = normalizeNumberInput(el('salePriceInput').value);
+      saveBtn.addEventListener('click', async () => {
+        const sel = el('item');
+        const id = sel.value;
+        const trimmedReorder = String(el('reorderInput').value || '').trim();
+        const salePrice = normalizeNumberInput(el('salePriceInput').value);
         if (!id) return alert('Select an item');
-        const trimmedReorder = String(val || '').trim();
         const reorderLevel = trimmedReorder ? parseInt(trimmedReorder,10) : null;
         if (trimmedReorder && Number.isNaN(reorderLevel)) return alert('Invalid reorder level');
         try{
           const res = await fetch('/api/items/' + encodeURIComponent(id), {
             method: 'PUT',
-            headers: {'Content-Type':'application/json'},
+            headers: { 'Content-Type':'application/json' },
             body: JSON.stringify({ reorderLevel, salePrice })
           });
           if (!res.ok) throw new Error('update failed ' + res.status);
@@ -478,20 +540,22 @@
           alert('Item saved');
           await show();
         }catch(e){
-          alert('Failed to save reorder: ' + (e.message || e));
+          alert('Failed to save item: ' + (e.message || e));
         }
       });
     }
     const sel = el('item');
-    sel && sel.addEventListener('change', async ()=>{
-      const opt = sel.options[sel.selectedIndex];
-      el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
-      el('salePriceInput').value = opt && opt.dataset && opt.dataset.salePrice ? opt.dataset.salePrice : '';
+    if (sel) sel.addEventListener('change', async () => {
+      syncSelectedItemInputs();
       await show();
     });
+    const from = el('from');
+    const to = el('to');
+    if (from) from.addEventListener('change', show);
+    if (to) to.addEventListener('change', show);
     const prevBtn = el('prevItemBtn');
     const nextBtn = el('nextItemBtn');
-    if (prevBtn) prevBtn.addEventListener('click', ()=> moveItemSelection(-1));
-    if (nextBtn) nextBtn.addEventListener('click', ()=> moveItemSelection(1));
+    if (prevBtn) prevBtn.addEventListener('click', () => moveItemSelection(-1));
+    if (nextBtn) nextBtn.addEventListener('click', () => moveItemSelection(1));
   });
 })();

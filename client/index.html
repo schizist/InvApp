@@ -10,30 +10,8 @@
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="manifest" href="/site.webmanifest" />
   <style>
-    :root{
-      --bg:#f4f6f8;
-      --fg:#0f172a;
-      --panel:#ffffff;
-      --border:#d8dee4;
-      --muted:#64748b;
-      --primary:#2e7d32;
-      --secondary:#e5e7eb;
-      --danger:#c62828;
-      --link:#111;
-      --high-contrast-bg:#000;
-      --high-contrast-fg:#fff;
-    }
-    body[data-theme="dark"]{
-      --bg:#050505;
-      --fg:#eee;
-      --panel:#0f1115;
-      --border:#2b2f36;
-      --muted:#9aa4b2;
-      --secondary:#1b1f25;
-      --link:#e5e7eb;
-      --high-contrast-bg:#fff;
-      --high-contrast-fg:#000;
-    }
+    :root{--bg:#f4f6f8;--fg:#0f172a;--panel:#ffffff;--border:#d8dee4;--muted:#64748b;--primary:#2e7d32;--secondary:#e5e7eb;--danger:#c62828;--link:#111;--high-contrast-bg:#000;--high-contrast-fg:#fff}
+    body[data-theme="dark"]{--bg:#050505;--fg:#eee;--panel:#0f1115;--border:#2b2f36;--muted:#9aa4b2;--secondary:#1b1f25;--link:#e5e7eb;--high-contrast-bg:#fff;--high-contrast-fg:#000}
     html,body{height:100%}
     body{font-family:system-ui,Segoe UI,Roboto,Arial,Helvetica,sans-serif;margin:0;padding:16px;background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased}
     h1{margin:0;font-size:1.5rem}
@@ -87,7 +65,10 @@
       try{
         const t = localStorage.getItem('invapp.theme');
         if (t === 'dark' || t === 'light') document.body.setAttribute('data-theme', t);
-        window.addEventListener('DOMContentLoaded', ()=>{ const btn = document.getElementById('themeToggle'); if (btn) btn.textContent = (t==='dark') ? 'Light' : 'Dark'; });
+        window.addEventListener('DOMContentLoaded', () => {
+          const btn = document.getElementById('themeToggle');
+          if (btn) btn.textContent = (t === 'dark') ? 'Light' : 'Dark';
+        });
       }catch(e){}
     })();
   </script>
@@ -103,6 +84,7 @@
       <button id="createDbBtn" class="btn btnNeutral" type="button">New DB</button>
       <a id="barsLink" class="btn btnSecondary" href="/bars.html">Stock</a>
       <a id="historyLink" class="btn btnSecondary" href="/history.html">Details</a>
+      <a id="ordersLink" class="btn btnSecondary" href="/orders.html">Orders</a>
       <a id="vendorsLink" class="btn btnSecondary" href="/vendors.html">Vendors</a>
       <button id="themeToggle" class="btn btnNeutral">Dark</button>
       <button id="endSessionBtn" class="btn btnNeutral" style="display:none">End session</button>

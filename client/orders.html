@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>InvApp - Orders</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <style>
+    :root{--bg:#f4f6f8;--fg:#0f172a;--panel:#fff;--border:#d8dee4;--muted:#64748b;--primary:#0b5ed7;--secondary:#e5e7eb;--danger:#c62828;--ok:#2e7d32;--warn:#b45309}
+    body[data-theme="dark"]{--bg:#050505;--fg:#eee;--panel:#0f1115;--border:#2b2f36;--muted:#9aa4b2;--secondary:#1b1f25}
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:16px;background:var(--bg);color:var(--fg)}
+    h1{margin:0;font-size:1.5rem}.subtitle{margin:4px 0 0;color:var(--muted)}
+    .topbar{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}.topActions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .btn{height:38px;padding:0 12px;border-radius:8px;border:1px solid transparent;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+    .btnPrimary{background:var(--primary);color:#fff}.btnSecondary{background:var(--secondary);color:var(--fg)}.btnNeutral{background:var(--panel);color:var(--fg);border-color:var(--border)}.btnDanger{background:var(--danger);color:#fff}
+    .layout{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:12px;align-items:start}
+    @media(max-width:900px){.layout{grid-template-columns:1fr}}
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px}
+    .filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}.filters input,.filters select,.field input,.field select,.field textarea,.lineGrid input,.lineGrid select{height:34px;border:1px solid var(--border);border-radius:6px;padding:0 8px;background:var(--panel);color:var(--fg)}
+    .field textarea{height:70px;padding:8px;resize:vertical}.orderList{display:grid;gap:8px;max-height:70vh;overflow:auto}.orderRow{border:1px solid var(--border);border-radius:8px;padding:10px;background:rgba(15,23,42,.02);cursor:pointer}.orderRow.active{outline:2px solid var(--primary)}
+    .rowTop{display:flex;justify-content:space-between;gap:8px}.small{font-size:.86rem;color:var(--muted)}.badge{font-size:.78rem;font-weight:800;border-radius:999px;padding:3px 8px;text-transform:capitalize}.draft{background:#e5e7eb;color:#111}.ordered{background:#dbeafe;color:#1e3a8a}.partially_received{background:#fef3c7;color:#92400e}.received{background:#dcfce7;color:#166534}.cancelled{background:#fee2e2;color:#991b1b}
+    .formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.field{display:flex;flex-direction:column;gap:5px}.field label{font-size:.82rem;font-weight:800;color:var(--muted)}
+    .sectionTitle{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 0 8px}.sectionTitle h2{font-size:1rem;margin:0}
+    .lineCard{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px}.lineGrid{display:grid;grid-template-columns:1.1fr 1.6fr .6fr .5fr .8fr .8fr .7fr .8fr;gap:8px;align-items:end}
+    @media(max-width:1100px){.lineGrid{grid-template-columns:repeat(2,1fr)}}.lineGrid label{font-size:.75rem;font-weight:800;color:var(--muted);display:block;margin-bottom:4px}
+    .receiveBox{margin-top:8px;border-top:1px solid var(--border);padding-top:8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;align-items:end}.receipts{font-size:.85rem;color:var(--muted);margin-top:6px}
+    .statusLine{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}.empty{color:var(--muted);padding:18px;text-align:center}
+    body[data-theme="dark"] .orderRow,body[data-theme="dark"] .lineCard{background:#11151b}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div><h1>Orders</h1><p class="subtitle">Local-first order tracking</p></div>
+    <div class="topActions">
+      <button id="syncOrdersBtn" class="btn btnPrimary">Sync Orders</button>
+      <button id="newOrderBtn" class="btn btnPrimary">New Order</button>
+      <button id="duplicateBtn" class="btn btnNeutral">Duplicate</button>
+      <button id="sheetBtn" class="btn btnNeutral">Generate Order Sheet</button>
+      <a href="/" class="btn btnSecondary">Home</a>
+      <button id="themeToggle" class="btn btnNeutral">Dark</button>
+    </div>
+  </div>
+  <div class="layout">
+    <aside class="panel">
+      <div class="filters">
+        <input id="searchInput" placeholder="Search PO, vendor, client, job" />
+        <select id="statusFilter">
+          <option value="">All statuses</option><option value="open">Open orders</option><option value="needs">Needs receiving</option>
+          <option value="draft">Draft</option><option value="ordered">Ordered</option><option value="partially_received">Partially received</option><option value="received">Received</option><option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div id="ordersList" class="orderList"></div>
+    </aside>
+    <main class="panel">
+      <div id="editorEmpty" class="empty">Create or select an order.</div>
+      <div id="editor" style="display:none">
+        <div class="statusLine"><strong id="poLabel"></strong><span id="statusBadge" class="badge draft">draft</span><span id="progressLabel" class="small"></span></div>
+        <div class="formGrid">
+          <div class="field"><label>PO Number</label><input id="poNumber" placeholder="Leave blank to generate" /></div>
+          <div class="field"><label>Client / Contractor</label><input id="clientName" /></div>
+          <div class="field"><label>Job Name</label><input id="jobName" /></div>
+          <div class="field"><label>Order Date</label><input id="orderDate" type="date" /></div>
+          <div class="field"><label>Ordered From</label><select id="vendorName" required></select></div>
+          <div class="field"><label>Vendor Contact</label><input id="vendorContactName" readonly /></div>
+          <div class="field"><label>Vendor Email</label><input id="vendorEmail" readonly /></div>
+          <div class="field"><label>Vendor Phone</label><input id="vendorPhone" readonly /></div>
+          <div class="field"><label>Ordered By</label><input id="orderedBy" /></div>
+          <div class="field"><label>Entered By</label><input id="enteredBy" /></div>
+          <div class="field"><label>Status</label><select id="status"><option>draft</option><option>ordered</option><option>partially_received</option><option>received</option><option>cancelled</option></select></div>
+          <div class="field"><label>Notes</label><textarea id="notes"></textarea></div>
+        </div>
+        <div class="sectionTitle">
+          <h2>Line Items</h2>
+          <div class="topActions">
+            <select id="lineStatusFilter" class="btn btnNeutral" aria-label="Filter line status">
+              <option value="">All line statuses</option>
+              <option value="pending">Pending items</option>
+              <option value="partially_received">Partially received items</option>
+              <option value="complete">Complete items</option>
+              <option value="cancelled">Cancelled items</option>
+            </select>
+            <button id="addLineBtn" class="btn btnNeutral">Add Line Item</button>
+          </div>
+        </div>
+        <datalist id="itemOptions"></datalist>
+        <div id="lines"></div>
+        <div class="topActions">
+          <button id="saveDraftBtn" class="btn btnNeutral">Save Draft</button>
+          <button id="markOrderedBtn" class="btn btnPrimary">Mark Ordered</button>
+          <button id="cancelOrderBtn" class="btn btnDanger">Cancel Order</button>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/idb.js"></script>
+  <script src="/catalog.js"></script>
+  <script src="/orders.js"></script>
+</body>
+</html>

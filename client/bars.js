@@ -94,21 +94,21 @@
         for (let i=0;i<evs.length;i++) if (evs[i].type === 'COUNT') lastCountIndex = i;
         if (lastCountIndex >= 0){
           qty = evs[lastCountIndex].qty || 0;
-          for (let j=lastCountIndex+1;j<evs.length;j++) if (evs[j].type==='DELTA') qty += (evs[j].qty || 0);
+          for (let j=lastCountIndex+1;j<evs.length;j++) if (evs[j].type === 'DELTA') qty += (evs[j].qty || 0);
         } else {
-          evs.forEach(e=>{ if (e.type==='DELTA') qty += (e.qty || 0); });
+          evs.forEach(e => { if (e.type === 'DELTA') qty += (e.qty || 0); });
         }
         return { itemId, qty };
       });
     }
     const map = {};
-    (summary || []).forEach(s=>map[s.itemId]=s.qty);
-    const data = items.map(it=>({
+    (summary || []).forEach(s => { map[s.itemId] = s.qty; });
+    const data = items.map(it => ({
       id: it.id,
       label: it.label,
       category: it.category,
-      qty: map[it.id]||0,
-      reorder: (typeof it.reorderLevel!=='undefined' && it.reorderLevel!==null)?it.reorderLevel: null
+      qty: map[it.id] || 0,
+      reorder: (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) ? it.reorderLevel : null
     }));
     const grouped = groupByCategory(data);
     lastGroups = grouped;
@@ -166,10 +166,10 @@
     canvas.height = Math.floor(rect.height * DPR);
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    if (!data || data.length===0) return;
-    const padTop = 20*DPR;
-    const padBottom = 64*DPR;
-    const areaW = canvas.width - padTop*2;
+    if (!data || data.length === 0) return;
+    const padTop = 20 * DPR;
+    const padBottom = 64 * DPR;
+    const areaW = canvas.width - padTop * 2;
     const areaH = canvas.height - padTop - padBottom;
     const areaX = padTop;
     const areaY = padTop;
@@ -183,7 +183,7 @@
     const usedW = data.length * barW + Math.max(0, data.length - 1) * gap;
     const startX = areaX + Math.max(0, (areaW - usedW) / 2);
     const bars = [];
-    data.forEach((d,i)=>{
+    data.forEach((d,i) => {
       const x = startX + i * (barW + gap);
       const plotQty = Math.max(rangeMin, Math.min(rangeMax, d.qty));
       const barH = Math.floor(((plotQty - rangeMin) / rangeSpan) * areaH);
@@ -191,45 +191,50 @@
       ctx.fillStyle = '#1976d2';
       ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(barW), Math.floor(barH));
       ctx.fillStyle = dark ? '#eee' : '#222';
-      ctx.font = `${11*DPR}px sans-serif`;
-
-      // Label current stock quantity above each bar.
+      ctx.font = `${11 * DPR}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
       ctx.fillText(formatQty(d.qty), x + barW / 2, Math.max(areaY + 12 * DPR, y - 4 * DPR));
-
-      const labelX = x + barW/2;
-      const labelY = canvas.height - padBottom/2;
-      ctx.save(); ctx.translate(labelX, labelY); ctx.rotate(-Math.PI/2); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(d.label, 0, 0); ctx.restore();
+      const labelX = x + barW / 2;
+      const labelY = canvas.height - padBottom / 2;
+      ctx.save();
+      ctx.translate(labelX, labelY);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(d.label, 0, 0);
+      ctx.restore();
       if (d.reorder !== null && !Number.isNaN(d.reorder)){
         const plotReorder = Math.max(rangeMin, Math.min(rangeMax, d.reorder));
         const ry = areaY + (1 - ((plotReorder - rangeMin) / rangeSpan)) * areaH;
-        ctx.strokeStyle = '#c62828'; ctx.lineWidth = 2*DPR; ctx.beginPath(); ctx.moveTo(x, ry); ctx.lineTo(x+barW, ry); ctx.stroke();
-        // Label reorder threshold near the reorder marker line.
+        ctx.strokeStyle = '#c62828';
+        ctx.lineWidth = 2 * DPR;
+        ctx.beginPath();
+        ctx.moveTo(x, ry);
+        ctx.lineTo(x + barW, ry);
+        ctx.stroke();
         ctx.fillStyle = '#c62828';
-        ctx.font = `${10*DPR}px sans-serif`;
+        ctx.font = `${10 * DPR}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText(`Reorder ${formatQty(d.reorder)}`, x + barW / 2, Math.min(areaY + areaH - 12 * DPR, ry + 2 * DPR));
-        ctx.fillStyle = dark ? '#eee' : '#222';
-        ctx.font = `${11*DPR}px sans-serif`;
       }
-      bars.push({x, y, w: barW, h: barH, item: d});
+      bars.push({ x, y, w: barW, h: barH, item: d });
     });
 
-    canvas.onmousemove = (ev)=>{
+    canvas.onmousemove = (ev) => {
       const r = canvas.getBoundingClientRect();
       const px = (ev.clientX - r.left) * DPR;
       const py = (ev.clientY - r.top) * DPR;
       const hit = bars.find(b => px >= b.x && px <= (b.x + b.w) && py >= b.y && py <= (b.y + b.h));
-      if (!hit){ tooltip.style.display='none'; canvas.style.cursor = 'default'; return; }
+      if (!hit){ tooltip.style.display = 'none'; canvas.style.cursor = 'default'; return; }
       canvas.style.cursor = 'pointer';
       tooltip.style.display = 'block';
       tooltip.textContent = `${hit.item.label}: ${formatQty(hit.item.qty)}`;
-      tooltip.style.left = `${(hit.x / DPR)}px`;
-      tooltip.style.top = `8px`;
+      tooltip.style.left = `${hit.x / DPR}px`;
+      tooltip.style.top = '8px';
     };
-    canvas.onmouseleave = ()=>{ tooltip.style.display='none'; canvas.style.cursor = 'default'; };
+    canvas.onmouseleave = () => { tooltip.style.display = 'none'; canvas.style.cursor = 'default'; };
     canvas.onclick = (ev) => {
       const r = canvas.getBoundingClientRect();
       const px = (ev.clientX - r.left) * DPR;
@@ -240,11 +245,14 @@
     };
   }
 
-  window.addEventListener('resize', ()=>{ if (lastGroups.length) renderCharts(lastGroups); });
-  window.addEventListener('DOMContentLoaded', ()=>{
+  window.addEventListener('resize', () => { if (lastGroups.length) renderCharts(lastGroups); });
+  window.addEventListener('DOMContentLoaded', () => {
     const saved = localStorage.getItem('invapp.theme');
     applyTheme(saved === 'dark' ? 'dark' : 'light');
-    if (themeToggle) themeToggle.addEventListener('click', ()=>{ const cur = document.body.getAttribute('data-theme'); applyTheme(cur === 'dark' ? 'light' : 'dark'); });
+    if (themeToggle) themeToggle.addEventListener('click', () => {
+      const cur = document.body.getAttribute('data-theme');
+      applyTheme(cur === 'dark' ? 'light' : 'dark');
+    });
     load();
   });
 })();

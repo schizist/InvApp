@@ -4,7 +4,7 @@ Email reorder report to me
 
 Add minor section that is collapsed by default, it will have less common things so DB can be complete
 
-Input orders, and show pending orders on items. 
+Similar to the incoming orders we need an outgoing orders section that will also update inventory. Tracks job, client and backorder. and can do partial orders.
 
 add inventory items: the construction folder should have a list of T&B hardware we use according to Alan. 
     c-taps
