@@ -14,3 +14,6 @@ add inventory items: the construction folder should have a list of T&B hardware 
 
 Note: handling frontend redesign using claude since so good at design tasks. https://claude.ai/chat/18be4dfe-ed7a-431f-82b4-a686b934fe27
 
+Complete orders should be in their own area instead of mixed with pending orders. Pending orders should be ordered by date, oldest at bottom. 
+
+Need a way to process orders for items not tracked in inventory
