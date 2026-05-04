@@ -17,3 +17,5 @@ Note: handling frontend redesign using claude since so good at design tasks. htt
 Complete orders should be in their own area instead of mixed with pending orders. Pending orders should be ordered by date, oldest at bottom. 
 
 Need a way to process orders for items not tracked in inventory
+
+This is essentially becoming a POS system, I'm thinking just lean into it. 
