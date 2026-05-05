@@ -12,6 +12,8 @@ const {
   createDatabase
 } = require('./db');
 
+const reorder = require('./reorder');
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -987,6 +989,33 @@ app.get('/api/summary', (req, res) => {
   });
 });
 
+// GET reorder status — last sent time and config presence
+app.get('/api/reorder/status', (req, res) => {
+  const config = reorder.loadConfig();
+  const state = reorder.loadState();
+  res.json({
+    configured: !!(config && config.smtp_user && config.to),
+    to: config ? config.to : null,
+    lastSent: state.lastSent || null,
+    lastItemCount: state.lastItemCount || 0,
+    lastItems: state.lastItems || []
+  });
+});
+
+// POST reorder/send — manually trigger report regardless of daily gate
+app.post('/api/reorder/send', async (req, res) => {
+  const config = reorder.loadConfig();
+  if (!config || !config.smtp_user || !config.to) {
+    return res.status(400).json({ error: 'Email not configured. Create server/email-config.json.' });
+  }
+  try {
+    const result = await reorder.sendReorderEmail(db, config);
+    res.json(result);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Dump registered routes for debugging
 function listRoutes(){
   console.log('Registered routes:');
@@ -1005,4 +1034,9 @@ listRoutes();
 
 app.listen(port, () => {
   console.log(`InvApp server listening on http://localhost:${port}`);
+
+  // Run reorder check at startup then every hour.
+  // Email is sent at most once per calendar day and only when items are low.
+  reorder.runDailyCheck(db);
+  setInterval(() => reorder.runDailyCheck(db), 60 * 60 * 1000);
 });

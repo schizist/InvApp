@@ -1,0 +1,8 @@
+{
+  "smtp_host": "smtp.gmail.com",
+  "smtp_port": 587,
+  "smtp_user": "you@gmail.com",
+  "smtp_pass": "your-app-password",
+  "from": "InvApp <you@gmail.com>",
+  "to": "damnco17@gmail.com"
+}
