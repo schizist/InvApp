@@ -260,6 +260,7 @@ function initializeSchema(dbConn){
       ['mold_156-6','M-156-6','mold'],
       ['mold_156-8','M-156-8','mold'],
       ['mold_157','M-157','mold'],
+      ['mold_157-4','M-157-4','mold'],
       ['mold_157-6','M-157-6','mold'],
       ['mold_157-8','M-157-8','mold'],
       ['mold_157-12','M-157-12','mold'],

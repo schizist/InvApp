@@ -252,6 +252,73 @@
     }
   }
 
+  function getMoldWireSize(label) {
+    const m = (label || '').match(/^M-(\d{3})(?:-|$)/i);
+    return m ? m[1] : null;
+  }
+
+  function getMoldPipeSize(label) {
+    const m = (label || '').match(/^M-\d{3}-(\d+)$/i);
+    return m ? parseInt(m[1], 10) : -1;
+  }
+
+  function buildItemNode(it, summaryMap, queuedMap) {
+    const tpl = document.getElementById('itemTpl');
+    const node = tpl.content.cloneNode(true);
+    const labelEl = node.querySelector('.labelText');
+    labelEl.textContent = it.label;
+    if (labelEl.classList.contains('labelLink')) labelEl.href = '/history.html?itemId='+encodeURIComponent(it.id);
+    const sm = summaryMap[it.id] || {qty:0,lastUpdate:null};
+    const qtyState = computeLocalQty(it.id, summaryMap, queuedMap);
+    const queuedDelta = qtyState.queuedDelta;
+    const unit = getUnitInfo(it.category);
+    const baseQty = qtyState.baseQty;
+    const projectedBase = qtyState.currentQty;
+    const displayQty = (unit.multiplier>1) ? (projectedBase / unit.multiplier) : projectedBase;
+    const metaEl = node.querySelector('.meta');
+    metaEl.innerHTML = '';
+    const pre = document.createElement('span'); pre.className = 'pre'; pre.textContent = `Existing: ${baseQty}`;
+    const delta = document.createElement('span'); delta.className = 'delta';
+    delta.textContent = `Delta: ${(queuedDelta>0?'+':'') + queuedDelta}`;
+    const qtySpan = document.createElement('span'); qtySpan.className = 'qty'; qtySpan.textContent = `Current: ${projectedBase}`;
+    const dispSpan = document.createElement('span'); dispSpan.className = 'display'; dispSpan.textContent = `(${displayQty} × ${unit.label})`;
+    metaEl.appendChild(pre);
+    metaEl.appendChild(delta);
+    metaEl.appendChild(qtySpan);
+    metaEl.appendChild(dispSpan);
+    if (sm.lastUpdate) {
+      const last = document.createElement('span'); last.className = 'last'; last.style.marginLeft = '8px'; last.style.fontSize = '0.85rem'; last.style.color = '#666'; last.textContent = '• '+new Date(sm.lastUpdate).toLocaleString();
+      metaEl.appendChild(last);
+    }
+    const btnPlus = node.querySelector('.btnPlus');
+    const btnMinus = node.querySelector('.btnMinus');
+    const btnSet = node.querySelector('.btnSet');
+    const badge = node.querySelector('.reorderBadge');
+    if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null){ if (sm && (sm.qty || 0) <= (it.reorderLevel || 0)) { badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; } }
+    btnPlus.setAttribute('aria-label', `Add one ${unit.label} to ${it.label}`);
+    btnMinus.setAttribute('aria-label', `Subtract one ${unit.label} from ${it.label}`);
+    btnSet.setAttribute('aria-label', `Set absolute count for ${it.label}`);
+    btnPlus.addEventListener('click', async ()=>{
+      const unitInfo = getUnitInfo(it.category);
+      const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: unitInfo.multiplier, timestamp: new Date().toISOString(), source: 'mobile' };
+      await queueEvent(ev);
+    });
+    btnMinus.addEventListener('click', async ()=>{
+      const unitInfo = getUnitInfo(it.category);
+      const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: -unitInfo.multiplier, timestamp: new Date().toISOString(), source: 'mobile' };
+      await queueEvent(ev);
+    });
+    btnSet.addEventListener('click', async ()=>{
+      const val = prompt('Enter absolute count for '+it.label);
+      if (val===null) return;
+      const n = Number(val);
+      if (!Number.isInteger(n)) { alert('Enter a whole number.'); return; }
+      const ev = { id: uuidv4(), itemId: it.id, type: 'COUNT', qty: n, timestamp: new Date().toISOString(), source: 'mobile', sessionId: currentSession };
+      await queueEvent(ev);
+    });
+    return node;
+  }
+
   function renderItems(items, summaryMap, queuedMap){
     snapshotCategoryOpenState();
     itemsEl.innerHTML = '';
@@ -278,62 +345,37 @@
       const body = document.createElement('div');
       body.className = 'categoryItems';
 
-      byCategory[category].forEach(it => {
-        const tpl = document.getElementById('itemTpl');
-        const node = tpl.content.cloneNode(true);
-        const labelEl = node.querySelector('.labelText');
-        labelEl.textContent = it.label;
-        if (labelEl.classList.contains('labelLink')) labelEl.href = '/history.html?itemId='+encodeURIComponent(it.id);
-        const sm = summaryMap[it.id] || {qty:0,lastUpdate:null};
-        const qtyState = computeLocalQty(it.id, summaryMap, queuedMap);
-        const queuedDelta = qtyState.queuedDelta;
-        const unit = getUnitInfo(it.category);
-        const baseQty = qtyState.baseQty;
-        const projectedBase = qtyState.currentQty;
-        const displayQty = (unit.multiplier>1) ? (projectedBase / unit.multiplier) : projectedBase;
-        const metaEl = node.querySelector('.meta');
-        metaEl.innerHTML = '';
-        const pre = document.createElement('span'); pre.className = 'pre'; pre.textContent = `Existing: ${baseQty}`;
-        const delta = document.createElement('span'); delta.className = 'delta';
-        delta.textContent = `Delta: ${(queuedDelta>0?'+':'') + queuedDelta}`;
-        const qtySpan = document.createElement('span'); qtySpan.className = 'qty'; qtySpan.textContent = `Current: ${projectedBase}`;
-        const dispSpan = document.createElement('span'); dispSpan.className = 'display'; dispSpan.textContent = `(${displayQty} × ${unit.label})`;
-        metaEl.appendChild(pre);
-        metaEl.appendChild(delta);
-        metaEl.appendChild(qtySpan);
-        metaEl.appendChild(dispSpan);
-        if (sm.lastUpdate) {
-          const last = document.createElement('span'); last.className = 'last'; last.style.marginLeft = '8px'; last.style.fontSize = '0.85rem'; last.style.color = '#666'; last.textContent = '• '+new Date(sm.lastUpdate).toLocaleString();
-          metaEl.appendChild(last);
+      if (category === 'mold') {
+        const wireGroups = {};
+        const wireOrder = [];
+        const nonConforming = [];
+        byCategory[category].forEach(it => {
+          const wire = getMoldWireSize(it.label);
+          if (wire === null) {
+            nonConforming.push(it);
+          } else {
+            if (!wireGroups[wire]) { wireGroups[wire] = []; wireOrder.push(wire); }
+            wireGroups[wire].push(it);
+          }
+        });
+        wireOrder.forEach((wire, i) => {
+          const hdr = document.createElement('div');
+          hdr.className = 'moldWireHeader' + (i === 0 ? ' moldWireHeader--first' : '');
+          hdr.textContent = wire;
+          body.appendChild(hdr);
+          wireGroups[wire].sort((a, b) => getMoldPipeSize(a.label) - getMoldPipeSize(b.label));
+          wireGroups[wire].forEach(it => body.appendChild(buildItemNode(it, summaryMap, queuedMap)));
+        });
+        if (nonConforming.length > 0) {
+          const hdr = document.createElement('div');
+          hdr.className = 'moldWireHeader';
+          hdr.textContent = 'Other';
+          body.appendChild(hdr);
+          nonConforming.forEach(it => body.appendChild(buildItemNode(it, summaryMap, queuedMap)));
         }
-        const btnPlus = node.querySelector('.btnPlus');
-        const btnMinus = node.querySelector('.btnMinus');
-        const btnSet = node.querySelector('.btnSet');
-        const badge = node.querySelector('.reorderBadge');
-        if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null){ if (sm && (sm.qty || 0) <= (it.reorderLevel || 0)) { badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; } }
-        btnPlus.setAttribute('aria-label', `Add one ${unit.label} to ${it.label}`);
-        btnMinus.setAttribute('aria-label', `Subtract one ${unit.label} from ${it.label}`);
-        btnSet.setAttribute('aria-label', `Set absolute count for ${it.label}`);
-        btnPlus.addEventListener('click', async ()=>{
-          const unitInfo = getUnitInfo(it.category);
-          const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: unitInfo.multiplier, timestamp: new Date().toISOString(), source: 'mobile' };
-          await queueEvent(ev);
-        });
-        btnMinus.addEventListener('click', async ()=>{
-          const unitInfo = getUnitInfo(it.category);
-          const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: -unitInfo.multiplier, timestamp: new Date().toISOString(), source: 'mobile' };
-          await queueEvent(ev);
-        });
-        btnSet.addEventListener('click', async ()=>{
-          const val = prompt('Enter absolute count for '+it.label);
-          if (val===null) return;
-          const n = Number(val);
-          if (!Number.isInteger(n)) { alert('Enter a whole number.'); return; }
-          const ev = { id: uuidv4(), itemId: it.id, type: 'COUNT', qty: n, timestamp: new Date().toISOString(), source: 'mobile', sessionId: currentSession };
-          await queueEvent(ev);
-        });
-        body.appendChild(node);
-      });
+      } else {
+        byCategory[category].forEach(it => body.appendChild(buildItemNode(it, summaryMap, queuedMap)));
+      }
 
       section.appendChild(body);
       itemsEl.appendChild(section);
