@@ -28,6 +28,13 @@
     .statusLine{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}.empty{color:var(--muted);padding:18px;text-align:center}
     .listSection{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 4px 4px;border-bottom:1px solid var(--border);margin-bottom:6px}.listSection+.listSection,.orderRow+.listSection{margin-top:12px;border-top:1px solid var(--border)}
     body[data-theme="dark"] .orderRow,body[data-theme="dark"] .lineCard{background:#11151b}
+    .addNewItemBtn{margin-top:4px;width:100%;height:26px;font-size:.75rem;padding:0 6px;border-radius:6px;border:1px solid var(--border);background:var(--secondary);color:var(--fg);cursor:pointer;font-weight:700}
+    .addNewItemBtn:hover{background:var(--border)}
+    .newItemOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center}
+    .newItemOverlay.open{display:flex}
+    .newItemBox{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;width:min(360px,92vw);display:flex;flex-direction:column;gap:12px}
+    .newItemBox h3{margin:0;font-size:1rem}.newItemBox .field input,.newItemBox .field select{width:100%;box-sizing:border-box}
+    .optional{font-weight:400;font-size:.8em;color:var(--muted)}
   </style>
 </head>
 <body>
@@ -95,6 +102,25 @@
       </div>
     </main>
   </div>
+  <div id="newItemModal" class="newItemOverlay" role="dialog" aria-modal="true" aria-labelledby="newItemTitle">
+    <div class="newItemBox">
+      <h3 id="newItemTitle">New Inventory Item</h3>
+      <div class="field"><label>Label <span class="optional">(required)</span></label><input id="newItemLabel" placeholder="e.g. M-175-30" autocomplete="off" /></div>
+      <div class="field"><label>Category</label>
+        <select id="newItemCategory">
+          <option value="mold">Mold</option><option value="wire">Wire</option><option value="shot">Shot</option>
+          <option value="cap">Cap</option><option value="enclosure">Enclosure</option><option value="anode">Anode</option>
+          <option value="refcell">Ref Cell</option><option value="other">Other</option>
+        </select>
+      </div>
+      <div class="field"><label>Unit <span class="optional">(optional)</span></label><input id="newItemUnit" placeholder="pcs" /></div>
+      <div class="topActions" style="justify-content:flex-end">
+        <button id="newItemCancelBtn" class="btn btnNeutral">Cancel</button>
+        <button id="newItemSaveBtn" class="btn btnPrimary">Create &amp; Select</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/idb.js"></script>
   <script src="/catalog.js"></script>
   <script src="/orders.js"></script>

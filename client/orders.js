@@ -239,7 +239,7 @@
     return `
       <div class="lineCard" data-line-id="${escapeHtml(line.id)}" data-line-index="${idx}">
         <div class="lineGrid">
-          ${itemSelectBlock('Inventory Item', `lineItem-${idx}`, line.itemId || '')}
+          ${itemSelectBlock('Inventory Item', `lineItem-${idx}`, line.itemId || '', idx)}
           ${inputBlock('Description', `lineDesc-${idx}`, line.description || '')}
           ${inputBlock('Qty Ordered', `lineQty-${idx}`, line.quantityOrdered || '', 'type="number" step="1" min="1" inputmode="numeric"')}
           ${inputBlock('Unit', `lineUnit-${idx}`, line.unit || '')}
@@ -269,11 +269,14 @@
     return `<div><label for="${id}">${label}</label><input id="${id}" ${attrs || ''} value="${escapeHtml(value)}" /></div>`;
   }
 
-  function itemSelectBlock(label, id, value){
-    const options = ['<option value="">Select item</option>'].concat(items.map(item => (
+  function itemSelectBlock(label, id, value, lineIdx){
+    const options = ['<option value="">— none —</option>'].concat(items.map(item => (
       `<option value="${escapeHtml(item.id)}" ${String(item.id) === String(value) ? 'selected' : ''}>${escapeHtml(item.label)}</option>`
     )));
-    return `<div><label for="${id}">${label}</label><select id="${id}">${options.join('')}</select></div>`;
+    const addBtn = lineIdx != null
+      ? `<button type="button" class="addNewItemBtn" data-idx="${lineIdx}">+ New inventory item</button>`
+      : '';
+    return `<div><label for="${id}">${label} <span class="optional">(optional)</span></label><select id="${id}">${options.join('')}</select>${addBtn}</div>`;
   }
 
   function bindLineEvents(){
@@ -292,6 +295,8 @@
       card.querySelector('.receiveFullBtn').addEventListener('click', () => receiveLine(idx, true));
       card.querySelector('.receivePartialBtn').addEventListener('click', () => receiveLine(idx, false));
       card.querySelector('.saveLineBtn').addEventListener('click', () => saveLineItem(idx));
+      const addBtn = card.querySelector('.addNewItemBtn');
+      if (addBtn) addBtn.addEventListener('click', () => openNewItemModal(Number(addBtn.dataset.idx)));
     });
   }
 
@@ -523,6 +528,60 @@
 
   function escapeHtml(v){ return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   function formatQty(v){ const n = Number(v) || 0; return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/,''); }
+
+  let pendingNewItemLineIdx = null;
+
+  function openNewItemModal(lineIdx) {
+    pendingNewItemLineIdx = lineIdx;
+    $('newItemLabel').value = '';
+    $('newItemCategory').value = 'mold';
+    $('newItemUnit').value = '';
+    $('newItemModal').classList.add('open');
+    $('newItemLabel').focus();
+  }
+
+  function closeNewItemModal() {
+    $('newItemModal').classList.remove('open');
+    pendingNewItemLineIdx = null;
+  }
+
+  async function submitNewItem() {
+    const label = $('newItemLabel').value.trim();
+    if (!label) return alert('Label is required.');
+    const category = $('newItemCategory').value;
+    const unit = $('newItemUnit').value.trim() || null;
+    try {
+      const res = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, category, unit })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        return alert(err.error || 'Failed to create item.');
+      }
+      const newItem = await res.json();
+      items.push(newItem);
+      $('itemOptions').innerHTML = items.map(it => `<option value="${escapeHtml(it.label)}" data-id="${escapeHtml(it.id)}"></option>`).join('');
+      if (pendingNewItemLineIdx != null && current) {
+        const line = current.lines[pendingNewItemLineIdx];
+        if (line) {
+          line.itemId = newItem.id;
+          line.itemLabel = newItem.label;
+          if (!line.description) line.description = newItem.label;
+        }
+      }
+      closeNewItemModal();
+      renderEditor();
+    } catch(e) {
+      alert('Failed to create item: ' + (e.message || e));
+    }
+  }
+
+  $('newItemSaveBtn').addEventListener('click', submitNewItem);
+  $('newItemCancelBtn').addEventListener('click', closeNewItemModal);
+  $('newItemModal').addEventListener('click', e => { if (e.target === $('newItemModal')) closeNewItemModal(); });
+  $('newItemLabel').addEventListener('keydown', e => { if (e.key === 'Enter') submitNewItem(); if (e.key === 'Escape') closeNewItemModal(); });
 
   $('newOrderBtn').addEventListener('click', () => { current = baseOrder(); renderList(); renderEditor(); });
   $('duplicateBtn').addEventListener('click', duplicateOrder);

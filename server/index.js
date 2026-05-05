@@ -624,6 +624,29 @@ app.get('/api/items', (req, res) => {
   });
 });
 
+// POST items — create a new catalog item
+app.post('/api/items', (req, res) => {
+  const { label, category, unit, packSize } = req.body || {};
+  if (!label || !String(label).trim()) return res.status(400).json({ error: 'label is required' });
+  const cat = (category || 'other').toLowerCase();
+  const slug = String(label).trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '').toLowerCase();
+  const id = `${cat}_${slug}`;
+  db.run(
+    `INSERT INTO items (id, label, category, unit, packSize) VALUES (?, ?, ?, ?, ?)`,
+    [id, String(label).trim(), cat, unit || null, packSize ? Number(packSize) : null],
+    function(err) {
+      if (err) {
+        if (err.message && err.message.includes('UNIQUE')) return res.status(409).json({ error: 'An item with that label already exists in this category.' });
+        return res.status(500).json({ error: err.message });
+      }
+      db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId FROM items WHERE id = ?`, [id], (err2, row) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        res.status(201).json(row);
+      });
+    }
+  );
+});
+
 // POST events (accept array)
 app.post('/api/events', (req, res) => {
   const events = Array.isArray(req.body) ? req.body : [req.body];
