@@ -1,11 +1,7 @@
-Generate reorder report when item reaches reorder threshold. Includes vendor info and graph of supply levels. 
-
-Email reorder report to me
-
 Similar to the incoming orders we need an outgoing orders section for materials that are going out to clients and will also update inventory. Tracks job, client and backorder. and can do partial orders.
 
 This is essentially becoming a POS system, I'm thinking just lean into it. 
 
-The frontend needs reworked, to optimize for ease of use. It needs to be intuitively organized, and functional. Then it should look polished and professional. 
+The frontend needs reworked to optimize for ease of use and organization accross the whole app. It needs to be intuitively organized, and functional. Then it should look polished and professional. 
 
 
