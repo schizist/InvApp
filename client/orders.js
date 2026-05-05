@@ -175,21 +175,40 @@
 
   function renderList(){
     const q = $('searchInput').value.trim().toLowerCase();
-    const status = $('statusFilter').value;
+    const statusFilter = $('statusFilter').value;
+    const COMPLETE_STATUSES = ['received', 'cancelled'];
     const filtered = orders.filter(o => {
       const text = [o.poNumber,o.vendorName,o.clientName,o.jobName].join(' ').toLowerCase();
       if (q && !text.includes(q)) return false;
-      if (status === 'open') return !['received','cancelled'].includes(o.status);
-      if (status === 'needs') return ['ordered','partially_received'].includes(o.status);
-      return !status || o.status === status;
+      if (statusFilter === 'open') return !COMPLETE_STATUSES.includes(o.status);
+      if (statusFilter === 'needs') return ['ordered','partially_received'].includes(o.status);
+      return !statusFilter || o.status === statusFilter;
     });
-    $('ordersList').innerHTML = filtered.length ? filtered.map(o => `
-      <div class="orderRow ${current && current.id === o.id ? 'active' : ''}" data-id="${escapeHtml(o.id)}">
+    const byDate = (a, b) => String(b.orderDate || '').localeCompare(String(a.orderDate || ''));
+    const pending = filtered.filter(o => !COMPLETE_STATUSES.includes(o.status)).sort(byDate);
+    const complete = filtered.filter(o => COMPLETE_STATUSES.includes(o.status)).sort(byDate);
+    function rowHtml(o){
+      return `<div class="orderRow ${current && current.id === o.id ? 'active' : ''}" data-id="${escapeHtml(o.id)}">
         <div class="rowTop"><strong>${escapeHtml(o.poNumber || 'No PO')}</strong><span class="badge ${escapeHtml(o.status)}">${escapeHtml(o.status.replace('_',' '))}</span></div>
         <div>${escapeHtml(o.clientName || '')}${o.jobName ? ' / ' + escapeHtml(o.jobName) : ''}</div>
         <div class="small">${escapeHtml(o.vendorName || '')} | ${escapeHtml(o.orderDate || '')}</div>
         <div class="small">${formatQty((o.progress || {}).received)} / ${formatQty((o.progress || {}).ordered)} received</div>
-      </div>`).join('') : '<div class="empty">No orders found.</div>';
+      </div>`;
+    }
+    let html = '';
+    if (!filtered.length) {
+      html = '<div class="empty">No orders found.</div>';
+    } else {
+      if (pending.length) {
+        if (complete.length) html += '<div class="listSection">Active</div>';
+        html += pending.map(rowHtml).join('');
+      }
+      if (complete.length) {
+        html += '<div class="listSection">Completed</div>';
+        html += complete.map(rowHtml).join('');
+      }
+    }
+    $('ordersList').innerHTML = html;
     $('ordersList').querySelectorAll('.orderRow').forEach(row => {
       row.addEventListener('click', () => { current = orders.find(o => o.id === row.dataset.id); renderList(); renderEditor(); });
     });

@@ -2,20 +2,11 @@ Generate reorder report when item reaches reorder threshold. Includes vendor inf
 
 Email reorder report to me
 
-Add minor section that is collapsed by default, it will have less common things so DB can be complete
+Similar to the incoming orders we need an outgoing orders section for materials that are going out to clients and will also update inventory. Tracks job, client and backorder. and can do partial orders.
 
-Similar to the incoming orders we need an outgoing orders section that will also update inventory. Tracks job, client and backorder. and can do partial orders.
-
-add inventory items: the construction folder should have a list of T&B hardware we use according to Alan. 
-    c-taps
-    crimps
-    shunts
-    tape
-
-Note: handling frontend redesign using claude since so good at design tasks. https://claude.ai/chat/18be4dfe-ed7a-431f-82b4-a686b934fe27
-
-Complete orders should be in their own area instead of mixed with pending orders. Pending orders should be ordered by date, oldest at bottom. 
-
-Need a way to process orders for items not tracked in inventory
+Need a way to process orders for items not tracked in inventory, and/or a way to add inventory items to the db while creating an order. 
 
 This is essentially becoming a POS system, I'm thinking just lean into it. 
+
+The frontend needs reworked, to optimize for ease of use. It needs to be intuitively organized, and functional. Then it should look polished and professional. 
+
