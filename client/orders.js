@@ -1,4 +1,4 @@
-(async function(){
+﻿(async function(){
   if ('serviceWorker' in navigator) {
     try { await navigator.serviceWorker.register('/sw.js'); } catch(e){}
   }
@@ -16,7 +16,7 @@
 
   function applyTheme(t){
     const next = t === 'dark' ? 'dark' : 'light';
-    document.body.setAttribute('data-theme', next);
+    document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('invapp.theme', next);
     $('themeToggle').textContent = next === 'dark' ? 'Light' : 'Dark';
   }
@@ -270,7 +270,7 @@
   }
 
   function itemSelectBlock(label, id, value, lineIdx){
-    const options = ['<option value="">— none —</option>'].concat(items.map(item => (
+    const options = ['<option value="">â€” none â€”</option>'].concat(items.map(item => (
       `<option value="${escapeHtml(item.id)}" ${String(item.id) === String(value) ? 'selected' : ''}>${escapeHtml(item.label)}</option>`
     )));
     const addBtn = lineIdx != null
@@ -599,7 +599,7 @@
     if (current) current.vendorName = $('vendorName').value.trim();
     fillVendorFields(selectedVendor());
   });
-  $('themeToggle').addEventListener('click', () => applyTheme(document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+  $('themeToggle').addEventListener('click', () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
   window.addEventListener('online', () => syncOrders().catch(()=>{}));
 
   applyTheme(localStorage.getItem('invapp.theme') === 'dark' ? 'dark' : 'light');

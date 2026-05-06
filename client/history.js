@@ -1,4 +1,4 @@
-(function(){
+﻿(function(){
   function qs(){ return Object.fromEntries(new URLSearchParams(location.search)); }
   function el(id){ return document.getElementById(id); }
   const themeToggle = () => el('themeToggle');
@@ -9,7 +9,7 @@
 
   function applyTheme(t){
     const next = t === 'dark' ? 'dark' : 'light';
-    document.body.setAttribute('data-theme', next);
+    document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('invapp.theme', next);
     const btn = themeToggle();
     if (btn) btn.textContent = next === 'dark' ? 'Light' : 'Dark';
@@ -369,7 +369,7 @@
   function drawCountSeries(points, start, end){
     lastSeries = points.map(p => ({ date: p.date, qty: p.qty, ts: p.ts }));
     resizeCanvas();
-    const dark = document.body.getAttribute('data-theme') === 'dark';
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0,0,canvas.width,canvas.height);
     if (!points || points.length === 0) return;
@@ -449,7 +449,7 @@
     resizeCanvas();
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = document.body.getAttribute('data-theme') === 'dark' ? '#bbb' : '#666';
+    ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#bbb' : '#666';
     ctx.font = `${14 * DPR}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.fillText('No count events in selected range', canvas.width / 2, canvas.height / 2);
@@ -513,7 +513,7 @@
     applyTheme(saved === 'dark' ? 'dark' : 'light');
     const themeBtn = themeToggle();
     if (themeBtn) themeBtn.addEventListener('click', () => {
-      const cur = document.body.getAttribute('data-theme');
+      const cur = document.documentElement.getAttribute('data-theme');
       applyTheme(cur === 'dark' ? 'light' : 'dark');
     });
     const saveBtn = el('saveReorder');

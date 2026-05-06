@@ -1,11 +1,11 @@
-(function(){
+﻿(function(){
   function el(id){ return document.getElementById(id); }
   const themeToggle = el('themeToggle');
   const listEl = el('vendorList');
 
   function applyTheme(t){
     const next = t === 'dark' ? 'dark' : 'light';
-    document.body.setAttribute('data-theme', next);
+    document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('invapp.theme', next);
     if (themeToggle) themeToggle.textContent = next === 'dark' ? 'Light' : 'Dark';
   }
@@ -197,7 +197,7 @@
     const saved = localStorage.getItem('invapp.theme');
     applyTheme(saved === 'dark' ? 'dark' : 'light');
     if (themeToggle) themeToggle.addEventListener('click', () => {
-      const cur = document.body.getAttribute('data-theme');
+      const cur = document.documentElement.getAttribute('data-theme');
       applyTheme(cur === 'dark' ? 'light' : 'dark');
     });
     const addBtn = el('addVendorBtn');

@@ -1,4 +1,4 @@
-// Simple client app: register sw, list items, queue events, sync
+﻿// Simple client app: register sw, list items, queue events, sync
 (async function(){
   if ('serviceWorker' in navigator) {
     try { await navigator.serviceWorker.register('/sw.js'); console.log('SW registered'); } catch(e){console.warn('SW failed',e);} 
@@ -281,13 +281,13 @@
     const delta = document.createElement('span'); delta.className = 'delta';
     delta.textContent = `Delta: ${(queuedDelta>0?'+':'') + queuedDelta}`;
     const qtySpan = document.createElement('span'); qtySpan.className = 'qty'; qtySpan.textContent = `Current: ${projectedBase}`;
-    const dispSpan = document.createElement('span'); dispSpan.className = 'display'; dispSpan.textContent = `(${displayQty} × ${unit.label})`;
+    const dispSpan = document.createElement('span'); dispSpan.className = 'display'; dispSpan.textContent = `(${displayQty} Ã— ${unit.label})`;
     metaEl.appendChild(pre);
     metaEl.appendChild(delta);
     metaEl.appendChild(qtySpan);
     metaEl.appendChild(dispSpan);
     if (sm.lastUpdate) {
-      const last = document.createElement('span'); last.className = 'last'; last.style.marginLeft = '8px'; last.style.fontSize = '0.85rem'; last.style.color = '#666'; last.textContent = '• '+new Date(sm.lastUpdate).toLocaleString();
+      const last = document.createElement('span'); last.className = 'last'; last.style.marginLeft = '8px'; last.style.fontSize = '0.85rem'; last.style.color = '#666'; last.textContent = 'â€¢ '+new Date(sm.lastUpdate).toLocaleString();
       metaEl.appendChild(last);
     }
     const btnPlus = node.querySelector('.btnPlus');
@@ -390,7 +390,7 @@
     } else {
       queuedEl.innerHTML = '';
       q.forEach(ev => {
-        const d = document.createElement('div'); d.textContent = `${ev.type} ${ev.qty} → ${ev.itemId} @ ${new Date(ev.timestamp).toLocaleString()}`;
+        const d = document.createElement('div'); d.textContent = `${ev.type} ${ev.qty} â†’ ${ev.itemId} @ ${new Date(ev.timestamp).toLocaleString()}`;
         queuedEl.appendChild(d);
       });
     }
@@ -581,12 +581,12 @@
     const toggle = document.getElementById('themeToggle');
     function applyTheme(t){
       const next = t === 'dark' ? 'dark' : 'light';
-      document.body.setAttribute('data-theme', next);
+      document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('invapp.theme', next);
       if (toggle) toggle.textContent = (next==='dark') ? 'Light' : 'Dark';
     }
     const saved = localStorage.getItem('invapp.theme');
     applyTheme(saved === 'dark' ? 'dark' : 'light');
-    if (toggle) toggle.addEventListener('click', ()=>{ const cur = document.body.getAttribute('data-theme'); applyTheme(cur==='dark' ? 'light' : 'dark'); });
+    if (toggle) toggle.addEventListener('click', ()=>{ const cur = document.documentElement.getAttribute('data-theme'); applyTheme(cur==='dark' ? 'light' : 'dark'); });
   })();
 })();

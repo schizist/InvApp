@@ -4,7 +4,8 @@
       "Bash(npm install *)",
       "Bash(node -e \"require\\('nodemailer'\\); console.log\\('ok'\\)\")",
       "Bash(git checkout *)",
-      "Bash(node -e \"require\\('./reorder'\\); console.log\\('reorder.js loads ok'\\)\")"
+      "Bash(node -e \"require\\('./reorder'\\); console.log\\('reorder.js loads ok'\\)\")",
+      "Bash(powershell -Command \"\\(Get-Content app.js\\) -replace 'document\\\\.body\\\\.setAttribute\\\\\\(''data-theme''', 'document.documentElement.setAttribute\\(''data-theme''' -replace 'document\\\\.body\\\\.getAttribute\\\\\\(''data-theme''', 'document.documentElement.getAttribute\\(''data-theme''' | Set-Content app.js -Encoding utf8\")"
     ]
   }
 }

@@ -2,6 +2,4 @@ Similar to the incoming orders we need an outgoing orders section for materials 
 
 This is essentially becoming a POS system, I'm thinking just lean into it. 
 
-The frontend needs reworked to optimize for ease of use and organization accross the whole app. It needs to be intuitively organized, and functional. Then it should look polished and professional. 
-
 

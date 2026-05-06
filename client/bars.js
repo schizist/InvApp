@@ -1,4 +1,4 @@
-(function(){
+﻿(function(){
   const chartsEl = document.getElementById('charts');
   const themeToggle = document.getElementById('themeToggle');
   const DPR = window.devicePixelRatio || 1;
@@ -32,7 +32,7 @@
 
   function applyTheme(t){
     const next = t === 'dark' ? 'dark' : 'light';
-    document.body.setAttribute('data-theme', next);
+    document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('invapp.theme', next);
     if (themeToggle) themeToggle.textContent = next === 'dark' ? 'Light' : 'Dark';
     if (lastGroups.length) renderCharts(lastGroups);
@@ -159,7 +159,7 @@
   }
 
   function drawBars(canvas, tooltip, data, categoryKey){
-    const dark = document.body.getAttribute('data-theme') === 'dark';
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     const wrap = canvas.parentElement;
     const rect = wrap.getBoundingClientRect();
     canvas.width = Math.floor(rect.width * DPR);
@@ -250,7 +250,7 @@
     const saved = localStorage.getItem('invapp.theme');
     applyTheme(saved === 'dark' ? 'dark' : 'light');
     if (themeToggle) themeToggle.addEventListener('click', () => {
-      const cur = document.body.getAttribute('data-theme');
+      const cur = document.documentElement.getAttribute('data-theme');
       applyTheme(cur === 'dark' ? 'light' : 'dark');
     });
     load();

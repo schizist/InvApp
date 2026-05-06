@@ -3,115 +3,65 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>InvApp - Inventory</title>
+  <title>InvApp — Inventory</title>
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="manifest" href="/site.webmanifest" />
-  <style>
-    :root{--bg:#f4f6f8;--fg:#0f172a;--panel:#ffffff;--border:#d8dee4;--muted:#64748b;--primary:#2e7d32;--secondary:#e5e7eb;--danger:#c62828;--link:#111;--high-contrast-bg:#000;--high-contrast-fg:#fff}
-    body[data-theme="dark"]{--bg:#050505;--fg:#eee;--panel:#0f1115;--border:#2b2f36;--muted:#9aa4b2;--secondary:#1b1f25;--link:#e5e7eb;--high-contrast-bg:#fff;--high-contrast-fg:#000}
-    html,body{height:100%}
-    body{font-family:system-ui,Segoe UI,Roboto,Arial,Helvetica,sans-serif;margin:0;padding:16px;background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased}
-    h1{margin:0;font-size:1.5rem}
-    h2,h3{margin:14px 0 8px 0}
-    .subtitle{margin:4px 0 0 0;color:var(--muted);font-size:0.95rem}
-    .topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
-    .topActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-    .btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 12px;border-radius:8px;border:1px solid transparent;text-decoration:none;font-weight:700;cursor:pointer}
-    .btnPrimary{background:var(--primary);color:#fff}
-    .btnSecondary{background:var(--secondary);color:var(--link)}
-    .btnNeutral{background:var(--panel);color:var(--link);border-color:var(--border)}
-    .dbSelect{height:40px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--fg);font-weight:600}
-    #statusPill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:0.85rem;font-weight:700;margin-left:4px}
-    #statusPill.online{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7}
-    #statusPill.offline{background:#ffebee;color:#b71c1c;border:1px solid #ef9a9a}
-    #status{color:var(--muted)}
-    .item{display:flex;justify-content:space-between;align-items:center;padding:.6rem;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--panel)}
-    .label{font-size:1.1rem;font-weight:600}
-    .labelLink{display:inline-block;text-decoration:none;color:var(--link);background:#f1f3f4;border:1px solid #d0d7de;border-radius:8px;padding:4px 10px;line-height:1.2}
-    .labelLink:hover{background:#e8eaed}
-    body[data-theme="dark"] .labelLink{color:#eee;background:#1b1d20;border-color:#3a3f45}
-    body[data-theme="dark"] .labelLink:hover{background:#24282d}
-    .meta{margin-top:6px;font-size:0.95rem;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-    .meta .qty{font-weight:800;color:var(--high-contrast-fg);background:var(--high-contrast-bg);padding:4px 8px;border-radius:6px}
-    .meta .delta{opacity:0.8}
-    .meta .display{margin-left:6px}
-    .controls{display:flex;flex-direction:column;align-items:center;gap:8px}
-    .controls button{width:64px;height:64px;border-radius:10px;border:0;color:#fff;font-size:1.25rem;box-shadow:0 2px 0 rgba(0,0,0,0.2);touch-action:manipulation}
-    .controls button.btnPlus{background:#2e7d32}
-    .controls button.btnMinus{background:#c62828}
-    .controls button.btnSet{background:#1976d2;width:32px;height:32px;border-radius:8px;font-size:0.65rem}
-    .controls button:active{transform:translateY(1px)}
-    #items{margin-top:12px}
-    .categoryGroup{margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
-    .categoryTitle{cursor:pointer;padding:10px 12px;font-weight:700;list-style:none}
-    .categoryTitle::-webkit-details-marker{display:none}
-    .categoryTitle::before{content:'v ';font-size:0.9rem}
-    .categoryGroup:not([open]) .categoryTitle::before{content:'> '}
-    .categoryItems{padding:0 8px 8px}
-    .moldWireHeader{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 4px 2px;margin-top:4px;border-top:1px solid var(--border)}
-    .moldWireHeader--first{border-top:none;padding-top:0;margin-top:0}
-    #queueSummary{margin-top:8px;font-weight:600}
-    #queued{background:#fff8e1;border:1px solid #ffe082;padding:.5rem;margin-top:1rem;border-radius:6px}
-    body[data-theme="dark"] #queued{background:#1c1810;border-color:#3a2f16}
-    #syncBtn.loading{position:relative}
-    #syncBtn.loading::after{content:"";width:16px;height:16px;border:2px solid rgba(255,255,255,0.6);border-top-color:transparent;border-radius:50%;position:absolute;right:10px;top:50%;transform:translateY(-50%);animation:spin 1s linear infinite}
-    @keyframes spin{to{transform:translateY(-50%) rotate(360deg)}}
-  </style>
+  <link rel="stylesheet" href="/styles.css" />
+  <script>
+    try {
+      const t = localStorage.getItem('invapp.theme');
+      if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+    } catch(e) {}
+  </script>
 </head>
 <body>
-  <script>
-    (function(){
-      try{
-        const t = localStorage.getItem('invapp.theme');
-        if (t === 'dark' || t === 'light') document.body.setAttribute('data-theme', t);
-        window.addEventListener('DOMContentLoaded', () => {
-          const btn = document.getElementById('themeToggle');
-          if (btn) btn.textContent = (t === 'dark') ? 'Light' : 'Dark';
-        });
-      }catch(e){}
-    })();
-  </script>
 
-  <div class="topbar">
-    <div>
-      <h1>InvApp</h1>
-      <p class="subtitle">Local-first inventory</p>
+  <nav class="app-nav">
+    <a class="app-nav__brand" href="/"><span class="app-nav__dot"></span>InvApp</a>
+    <div class="app-nav__links">
+      <a href="/"            class="app-nav__link is-active">Inventory</a>
+      <a href="/bars.html"   class="app-nav__link" id="barsLink">Stock</a>
+      <a href="/history.html"class="app-nav__link" id="historyLink">Details</a>
+      <a href="/orders.html" class="app-nav__link">Orders</a>
+      <a href="/vendors.html"class="app-nav__link">Vendors</a>
     </div>
-    <div class="topActions">
-      <button id="syncBtn" class="btn btnPrimary">Sync</button>
+    <div class="app-nav__actions">
       <select id="dbSelect" class="dbSelect" aria-label="Select database"></select>
-      <button id="createDbBtn" class="btn btnNeutral" type="button">New DB</button>
-      <a id="barsLink" class="btn btnSecondary" href="/bars.html">Stock</a>
-      <a id="historyLink" class="btn btnSecondary" href="/history.html">Details</a>
-      <a id="ordersLink" class="btn btnSecondary" href="/orders.html">Orders</a>
-      <a id="vendorsLink" class="btn btnSecondary" href="/vendors.html">Vendors</a>
-      <button id="themeToggle" class="btn btnNeutral">Dark</button>
-      <button id="endSessionBtn" class="btn btnNeutral" style="display:none">End session</button>
-      <span id="statusPill" class="offline">Offline</span>
-      <span id="status">Status: unknown</span>
+      <button id="createDbBtn" class="btn-nav" type="button">New DB</button>
+      <button id="syncBtn"     class="btn-nav primary">Sync</button>
+      <span   id="statusPill"  class="status-pill offline">Offline</span>
+      <button id="themeToggle" class="btn-nav">Dark</button>
+      <button id="endSessionBtn" class="btn-nav" style="display:none">End Session</button>
     </div>
+  </nav>
+
+  <!-- hidden — app.js reads/sets this but we show the pill instead -->
+  <span id="status" style="display:none"></span>
+  <span id="sessionInfo" style="display:none"></span>
+
+  <div class="page">
+    <div id="items"></div>
+
+    <p id="queueSummary">Queued: <strong><span id="queuedCount">0</span></strong></p>
+    <div id="queued">No queued events</div>
   </div>
-
-  <h2>Items</h2>
-  <div id="items"></div>
-
-  <h3>Queued events</h3>
-  <div id="queueSummary">Queued events: <span id="queuedCount">0</span></div>
-  <div id="queued"></div>
 
   <template id="itemTpl">
     <div class="item">
-      <div>
-        <div class="label"><a class="labelText labelLink" href="#"></a> <span class="reorderBadge" style="display:none;margin-left:8px;background:#c62828;color:#fff;padding:2px 6px;border-radius:4px;font-size:0.8rem">REORDER</span></div>
+      <div style="min-width:0;flex:1">
+        <div class="label">
+          <a class="labelText labelLink" href="#"></a>
+          <span class="reorderBadge" style="display:none">REORDER</span>
+        </div>
         <div class="meta"></div>
       </div>
       <div class="controls">
-        <button class="btnPlus">+</button>
-        <button class="btnMinus">-</button>
-        <button class="btnSet">Set</button>
+        <button class="btnPlus" type="button">+</button>
+        <button class="btnMinus" type="button">−</button>
+        <button class="btnSet"   type="button">Set</button>
       </div>
     </div>
   </template>
