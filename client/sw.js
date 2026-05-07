@@ -1,4 +1,4 @@
-const CACHE_NAME = 'invapp-v7';
+const CACHE_NAME = 'invapp-v8';
 const APP_SHELL = [
   '/',
   '/index.html',
