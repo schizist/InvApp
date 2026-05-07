@@ -1,10 +1,11 @@
-const CACHE_NAME = 'invapp-v6';
+const CACHE_NAME = 'invapp-v7';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/app.js',
   '/idb.js',
   '/catalog.js',
+  '/styles.css',
   '/history.html',
   '/history.js',
   '/orders.html',

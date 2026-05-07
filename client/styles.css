@@ -631,3 +631,56 @@ canvas { width: 100%; height: 100%; display: block; }
    Utility
    ================================================================ */
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Orders back button — hidden by default, visible in stacked layout (≤ 860px) */
+#backToListBtn { display: none; }
+@media (max-width: 860px) {
+  #backToListBtn { display: inline-flex; margin-bottom: 12px; }
+}
+
+/* ================================================================
+   Mobile — ≤ 639px
+   ================================================================ */
+@media (max-width: 639px) {
+
+  /* Two-row sticky nav */
+  .app-nav {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 5px 10px 0;
+    gap: 0;
+  }
+  .app-nav__brand { flex: 1 1 auto; padding: 4px 0; }
+  .app-nav__actions { padding: 4px 0; gap: 4px; }
+  /* Links slot below brand row */
+  .app-nav__links {
+    order: 10;
+    flex: 0 0 calc(100% + 20px);
+    margin: 4px -10px 0;
+    padding: 3px 6px 4px;
+    border-top: 1px solid rgba(255,255,255,.1);
+    background: rgba(0,0,0,.18);
+    gap: 0;
+  }
+  .app-nav__link { height: 30px; padding: 0 8px; font-size: .77rem; }
+
+  /* Compact nav-action buttons */
+  .btn-nav { height: 28px; padding: 0 9px; font-size: .76rem; }
+
+  /* De-clutter nav: hide rarely-used controls */
+  #createDbBtn, .status-pill { display: none; }
+  .dbSelect { max-width: 78px; font-size: .75rem; padding: 0 5px; }
+
+  /* Page padding */
+  .page { padding: 10px; }
+
+  /* Bigger touch targets for primary buttons */
+  .btn { height: 40px; }
+
+  /* Sidebar actions: stretch buttons */
+  .sidebar-actions { justify-content: stretch; }
+  .sidebar-actions .btn { flex: 1; min-width: 0; }
+
+  /* Receive box: two-column on small screens */
+  .receiveBox { grid-template-columns: 1fr 1fr; }
+}

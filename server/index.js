@@ -630,19 +630,24 @@ app.get('/api/items', (req, res) => {
 app.post('/api/items', (req, res) => {
   const { label, category, unit, packSize } = req.body || {};
   if (!label || !String(label).trim()) return res.status(400).json({ error: 'label is required' });
+  const cleanLabel = String(label).trim();
   const cat = (category || 'other').toLowerCase();
-  const slug = String(label).trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '').toLowerCase();
+  const slug = cleanLabel.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '').toLowerCase();
+  if (!slug) return res.status(400).json({ error: 'Label must contain at least one letter, number, underscore, or hyphen.' });
   const id = `${cat}_${slug}`;
   db.run(
     `INSERT INTO items (id, label, category, unit, packSize) VALUES (?, ?, ?, ?, ?)`,
-    [id, String(label).trim(), cat, unit || null, packSize ? Number(packSize) : null],
+    [id, cleanLabel, cat, unit || null, packSize ? Number(packSize) : null],
     function(err) {
       if (err) {
-        if (err.message && err.message.includes('UNIQUE')) return res.status(409).json({ error: 'An item with that label already exists in this category.' });
-        return res.status(500).json({ error: err.message });
+        const msg = err.message || String(err);
+        console.error('POST /api/items insert error:', msg);
+        if (msg.toLowerCase().includes('unique')) return res.status(409).json({ error: 'An item with that label already exists in this category.' });
+        return res.status(500).json({ error: msg || 'Database error' });
       }
       db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId FROM items WHERE id = ?`, [id], (err2, row) => {
-        if (err2) return res.status(500).json({ error: err2.message });
+        if (err2) { console.error('POST /api/items select error:', err2.message); return res.status(500).json({ error: err2.message }); }
+        if (!row) return res.status(500).json({ error: 'Item created but could not be retrieved (id: ' + id + ')' });
         res.status(201).json(row);
       });
     }
@@ -1014,6 +1019,11 @@ app.post('/api/reorder/send', async (req, res) => {
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Catch-all: any unmatched /api/* route returns JSON (not HTML) so the client always gets parseable errors
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `No API route: ${req.method} ${req.path}` });
 });
 
 // Dump registered routes for debugging

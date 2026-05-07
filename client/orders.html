@@ -18,6 +18,7 @@
     @media (max-width: 860px) { .orders-layout { grid-template-columns: 1fr; } }
 
     .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    @media (max-width: 480px) { .filters { grid-template-columns: 1fr; } }
 
     /* Sidebar action row */
     .sidebar-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -117,6 +118,7 @@
       <main class="panel" style="padding:14px">
         <div id="editorEmpty" class="empty">Create or select an order to get started.</div>
         <div id="editor" style="display:none">
+          <button id="backToListBtn" class="btn btnNeutral" type="button">&#8592; Orders</button>
           <div class="statusLine">
             <strong id="poLabel" style="font-size:1.05rem"></strong>
             <span id="statusBadge" class="badge draft">draft</span>
@@ -162,7 +164,7 @@
 
           <div class="editor-actions">
             <button id="saveDraftBtn"   class="btn btnNeutral">Save Draft</button>
-            <button id="markOrderedBtn" class="btn btnPrimary">Mark Ordered</button>
+            <button id="markOrderedBtn" class="btn btnPrimary">Save Order</button>
             <button id="cancelOrderBtn" class="btn btnDanger">Cancel Order</button>
             <button id="deleteOrderBtn" class="btn btnDanger">Delete Order</button>
           </div>

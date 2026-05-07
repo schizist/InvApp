@@ -210,7 +210,14 @@
     }
     $('ordersList').innerHTML = html;
     $('ordersList').querySelectorAll('.orderRow').forEach(row => {
-      row.addEventListener('click', () => { current = orders.find(o => o.id === row.dataset.id); renderList(); renderEditor(); });
+      row.addEventListener('click', () => {
+        current = orders.find(o => o.id === row.dataset.id);
+        renderList();
+        renderEditor();
+        if (window.innerWidth <= 860) {
+          requestAnimationFrame(() => $('editor').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        }
+      });
     });
   }
 
@@ -557,10 +564,14 @@
         body: JSON.stringify({ label, category, unit })
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        return alert(err.error || 'Failed to create item.');
+        const body = await res.text().catch(() => '');
+        let msg;
+        try { msg = JSON.parse(body).error; } catch(_) {}
+        return alert(msg || `Failed to create item (HTTP ${res.status}): ${body.slice(0, 300)}`);
       }
       const newItem = await res.json();
+      if (!newItem || !newItem.id) throw new Error('Server returned invalid item data.');
+      items = items.filter(it => it && it.id);
       items.push(newItem);
       $('itemOptions').innerHTML = items.map(it => `<option value="${escapeHtml(it.label)}" data-id="${escapeHtml(it.id)}"></option>`).join('');
       if (pendingNewItemLineIdx != null && current) {
@@ -583,7 +594,21 @@
   $('newItemModal').addEventListener('click', e => { if (e.target === $('newItemModal')) closeNewItemModal(); });
   $('newItemLabel').addEventListener('keydown', e => { if (e.key === 'Enter') submitNewItem(); if (e.key === 'Escape') closeNewItemModal(); });
 
-  $('newOrderBtn').addEventListener('click', () => { current = baseOrder(); renderList(); renderEditor(); });
+  $('backToListBtn').addEventListener('click', () => {
+    current = null;
+    renderList();
+    renderEditor();
+    document.querySelector('.orders-layout').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  $('newOrderBtn').addEventListener('click', () => {
+    current = baseOrder();
+    renderList();
+    renderEditor();
+    if (window.innerWidth <= 860) {
+      requestAnimationFrame(() => $('editor').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
+  });
   $('duplicateBtn').addEventListener('click', duplicateOrder);
   $('sheetBtn').addEventListener('click', generateSheet);
   $('addLineBtn').addEventListener('click', addLine);
