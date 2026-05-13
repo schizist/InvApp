@@ -5,5 +5,6 @@ db_state.json
 node_modules
 .env
 .DS_Store
+email-config.json
 server/email-config.json
 server/reorder-state.json

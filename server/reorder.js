@@ -4,7 +4,7 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 
 const STATE_PATH = path.join(__dirname, 'reorder-state.json');
-const CONFIG_PATH = path.join(__dirname, 'email-config.json');
+const CONFIG_PATH = path.join(__dirname, '..', 'email-config.json');
 
 function loadState() {
   try { return JSON.parse(fs.readFileSync(STATE_PATH, 'utf8')); }
@@ -186,7 +186,7 @@ async function sendReorderEmail(db, config) {
     host: config.smtp_host,
     port: Number(config.smtp_port) || 587,
     secure: Number(config.smtp_port) === 465,
-    auth: { user: config.smtp_user, pass: config.smtp_pass }
+    auth: { user: config.smtp_user, pass: process.env.SMTP_PASS || config.smtp_pass }
   });
 
   const html = buildHtml(items);

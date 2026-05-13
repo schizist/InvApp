@@ -2,4 +2,6 @@ Similar to the incoming orders we need an outgoing orders section for materials 
 
 This is essentially becoming a POS system, I'm thinking just lean into it. 
 
+App is no longer asking to add received items to inventory. 
 
+usef gnvh nzdh vyhh

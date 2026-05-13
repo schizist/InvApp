@@ -2,7 +2,7 @@
     "smtp_host": "smtp.gmail.com",
     "smtp_port": 587,
     "smtp_user": "daniel@peakcorrosion.com",
-    "smtp_pass": "lgeeddeigslfwlls",
+    "smtp_pass": "",
     "from": "InvApp <daniel@peakcorrosion.com>",
     "to": "daniel@peakcorrosion.com"
   }
