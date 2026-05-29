@@ -430,7 +430,12 @@
   }
 
   async function syncOrders(){
-    const changes = (await IDB.getQueuedOrderChanges()).sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)));
+    const TYPE_RANK = { order: 0, line: 1, receipt: 2, lineDelete: 3, orderDelete: 4 };
+    const changes = (await IDB.getQueuedOrderChanges()).sort((a,b) => {
+      const ts = String(a.createdAt).localeCompare(String(b.createdAt));
+      if (ts !== 0) return ts;
+      return (TYPE_RANK[a.type] ?? 9) - (TYPE_RANK[b.type] ?? 9);
+    });
     const done = [];
     for (const change of changes) {
       try{
@@ -632,4 +637,5 @@
   await loadVendors();
   await loadOrders();
   if (navigator.onLine) syncOrders().catch(()=>{});
+  setInterval(() => { if (navigator.onLine) loadOrders().catch(()=>{}); }, 30000);
 })();
