@@ -287,7 +287,16 @@
     metaEl.appendChild(qtySpan);
     metaEl.appendChild(dispSpan);
     if (sm.lastUpdate) {
-      const last = document.createElement('span'); last.className = 'last'; last.style.marginLeft = '8px'; last.style.fontSize = '0.85rem'; last.style.color = '#666'; last.textContent = '• '+new Date(sm.lastUpdate).toLocaleString();
+      const lastDate = new Date(sm.lastUpdate);
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const fourWeeksAgo = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
+      let dateColor;
+      if (lastDate >= todayStart) dateColor = '#4caf50';
+      else if (lastDate >= fourWeeksAgo) dateColor = '#2196f3';
+      else dateColor = '#ffc107';
+      const dateStr = lastDate.toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      const last = document.createElement('span'); last.className = 'last'; last.style.marginLeft = '8px'; last.style.fontSize = '0.85rem'; last.style.color = dateColor; last.textContent = '• '+dateStr;
       metaEl.appendChild(last);
     }
     const btnPlus = node.querySelector('.btnPlus');
