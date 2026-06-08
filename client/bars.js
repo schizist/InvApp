@@ -159,6 +159,15 @@
     return Math.max(PANEL_MIN_WIDTH, Math.min(desired, viewportCap));
   }
 
+  function getBarColor(qty, reorder) {
+    if (reorder === null || reorder <= 0) return '#1976d2';
+    const ratio = qty / reorder;
+    if (ratio <= 1)    return '#c62828'; // at or below threshold
+    if (ratio <= 1.1)  return '#e65100'; // within 10% above
+    if (ratio <= 1.5)  return '#fbc02d'; // 10–50% above
+    return '#388e3c';                    // more than 50% above
+  }
+
   function drawBars(canvas, tooltip, data, categoryKey){
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     const wrap = canvas.parentElement;
@@ -174,10 +183,9 @@
     const areaH = canvas.height - padTop - padBottom;
     const areaX = padTop;
     const areaY = padTop;
-    const range = CATEGORY_RANGES[categoryKey] || { min: 0, max: 100 };
-    const rangeMin = range.min;
-    const rangeMax = range.max;
-    const rangeSpan = Math.max(1, rangeMax - rangeMin);
+    const rangeMin = 0;
+    const rangeMax = Math.max(1, ...data.map(d => d.qty));
+    const rangeSpan = rangeMax;
     const targetBarW = Math.floor(areaW / data.length * 0.7);
     const barW = Math.max(BAR_MIN_WIDTH * DPR, Math.min(BAR_MAX_WIDTH * DPR, targetBarW));
     const gap = Math.max(BAR_GAP_MIN * DPR, Math.min(BAR_GAP_MAX * DPR, barW * 0.5));
@@ -189,7 +197,7 @@
       const plotQty = Math.max(rangeMin, Math.min(rangeMax, d.qty));
       const barH = Math.floor(((plotQty - rangeMin) / rangeSpan) * areaH);
       const y = areaY + (areaH - barH);
-      ctx.fillStyle = '#1976d2';
+      ctx.fillStyle = getBarColor(d.qty, d.reorder);
       ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(barW), Math.floor(barH));
       ctx.fillStyle = dark ? '#eee' : '#222';
       ctx.font = `${11 * DPR}px sans-serif`;
