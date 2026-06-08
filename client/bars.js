@@ -102,13 +102,15 @@
     }
     const map = {};
     (summary || []).forEach(s => { map[s.itemId] = s.qty; });
-    const data = items.map(it => ({
-      id: it.id,
-      label: it.label,
-      category: it.category,
-      qty: map[it.id] || 0,
-      reorder: (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) ? it.reorderLevel : null
-    }));
+    const data = items
+      .filter(it => it.reorderLevel !== -1)
+      .map(it => ({
+        id: it.id,
+        label: it.label,
+        category: it.category,
+        qty: map[it.id] || 0,
+        reorder: (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) ? it.reorderLevel : null
+      }));
     const grouped = groupByCategory(data);
     lastGroups = grouped;
     renderCharts(grouped);
