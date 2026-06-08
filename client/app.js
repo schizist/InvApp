@@ -281,13 +281,13 @@
     const delta = document.createElement('span'); delta.className = 'delta';
     delta.textContent = `Delta: ${(queuedDelta>0?'+':'') + queuedDelta}`;
     const qtySpan = document.createElement('span'); qtySpan.className = 'qty'; qtySpan.textContent = `Current: ${projectedBase}`;
-    const dispSpan = document.createElement('span'); dispSpan.className = 'display'; dispSpan.textContent = `(${displayQty} Ã— ${unit.label})`;
+    const dispSpan = document.createElement('span'); dispSpan.className = 'display'; dispSpan.textContent = `(${displayQty} × ${unit.label})`;
     metaEl.appendChild(pre);
     metaEl.appendChild(delta);
     metaEl.appendChild(qtySpan);
     metaEl.appendChild(dispSpan);
     if (sm.lastUpdate) {
-      const last = document.createElement('span'); last.className = 'last'; last.style.marginLeft = '8px'; last.style.fontSize = '0.85rem'; last.style.color = '#666'; last.textContent = 'â€¢ '+new Date(sm.lastUpdate).toLocaleString();
+      const last = document.createElement('span'); last.className = 'last'; last.style.marginLeft = '8px'; last.style.fontSize = '0.85rem'; last.style.color = '#666'; last.textContent = '• '+new Date(sm.lastUpdate).toLocaleString();
       metaEl.appendChild(last);
     }
     const btnPlus = node.querySelector('.btnPlus');
@@ -390,7 +390,7 @@
     } else {
       queuedEl.innerHTML = '';
       q.forEach(ev => {
-        const d = document.createElement('div'); d.textContent = `${ev.type} ${ev.qty} â†’ ${ev.itemId} @ ${new Date(ev.timestamp).toLocaleString()}`;
+        const d = document.createElement('div'); d.textContent = `${ev.type} ${ev.qty} → ${ev.itemId} @ ${new Date(ev.timestamp).toLocaleString()}`;
         queuedEl.appendChild(d);
       });
     }
