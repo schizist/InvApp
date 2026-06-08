@@ -404,16 +404,15 @@
       else ctx.lineTo(x,y);
     });
     ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.strokeStyle = '#1976d2';
-    points.forEach(p => {
-      const x = mapX(p.ts);
-      const y = mapY(p.qty);
-      ctx.beginPath();
-      ctx.arc(x,y,4 * DPR,0,Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    });
+    const last = points[points.length - 1];
+    const lastX = mapX(last.ts);
+    const lastY = mapY(last.qty);
+    ctx.fillStyle = dark ? '#e0e0e0' : '#333';
+    ctx.font = `bold ${14 * DPR}px sans-serif`;
+    ctx.textAlign = lastX > pad + areaW * 0.75 ? 'right' : 'left';
+    ctx.textBaseline = lastY < pad + 20 * DPR ? 'top' : 'bottom';
+    ctx.fillText(String(last.qty), lastX + (ctx.textAlign === 'right' ? -6 * DPR : 6 * DPR), lastY + (ctx.textBaseline === 'top' ? 4 * DPR : -4 * DPR));
+    ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = dark ? '#e0e0e0' : '#333';
     ctx.font = `${12 * DPR}px sans-serif`;
     ctx.textAlign = 'center';
