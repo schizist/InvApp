@@ -7,7 +7,6 @@
   const BAR_GAP_MIN = 8;
   const BAR_GAP_MAX = 18;
   const PANEL_MIN_WIDTH = 280;
-  const PANEL_MAX_WIDTH = 760;
   let lastGroups = [];
   const categoryOpenState = {};
   const CATEGORY_ORDER = ['mold', 'wire', 'shot', 'cap', 'enclosure', 'anode', 'refcell'];
@@ -155,7 +154,7 @@
     const horizontalPadding = 40;
     const desired = horizontalPadding * 2 + (safeCount * targetBar) + ((safeCount - 1) * targetGap);
     const viewportCap = Math.max(PANEL_MIN_WIDTH, window.innerWidth - 32);
-    return Math.max(PANEL_MIN_WIDTH, Math.min(PANEL_MAX_WIDTH, Math.min(desired, viewportCap)));
+    return Math.max(PANEL_MIN_WIDTH, Math.min(desired, viewportCap));
   }
 
   function drawBars(canvas, tooltip, data, categoryKey){
@@ -217,7 +216,7 @@
         ctx.font = `${10 * DPR}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText(`Reorder ${formatQty(d.reorder)}`, x + barW / 2, Math.min(areaY + areaH - 12 * DPR, ry + 2 * DPR));
+        ctx.fillText(formatQty(d.reorder), x + barW / 2, Math.min(areaY + areaH - 12 * DPR, ry + 2 * DPR));
       }
       bars.push({ x, y, w: barW, h: barH, item: d });
     });
