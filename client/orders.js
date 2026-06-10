@@ -118,7 +118,7 @@
     select.value = value || '';
   }
 
-  async function loadOrders(){
+  async function loadOrders(opts = {}){
     if (navigator.onLine) {
       try{
         const res = await fetch('/api/orders');
@@ -134,7 +134,7 @@
     orders = localOrders.map((order, i) => decorateOrder(order, localLines[i] || [], localReceipts[i] || []))
       .sort((a,b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
     renderList();
-    if (current) {
+    if (current && !opts.background) {
       current = orders.find(o => o.id === current.id) || current;
       renderEditor();
     }
@@ -637,5 +637,5 @@
   await loadVendors();
   await loadOrders();
   if (navigator.onLine) syncOrders().catch(()=>{});
-  setInterval(() => { if (navigator.onLine) loadOrders().catch(()=>{}); }, 30000);
+  setInterval(() => { if (navigator.onLine) loadOrders({ background: true }).catch(()=>{}); }, 30000);
 })();
