@@ -47,10 +47,36 @@ function dailyQty(events, dayEndIso) {
   return Math.max(0, computeQty(evs));
 }
 
-async function getReorderItems(db) {
+// Items with outstanding quantity on a non-draft, non-cancelled order line —
+// these are automatically muted since a reorder is already in motion.
+function getOnOrderItemIds(db) {
   return new Promise((resolve, reject) => {
     db.all(`
-      SELECT i.id, i.label, i.category, i.reorderLevel, i.reorderQty,
+      SELECT DISTINCT l.itemId
+      FROM order_lines l
+      JOIN orders o ON o.id = l.orderId
+      LEFT JOIN (
+        SELECT orderLineId, SUM(quantityReceived) AS received
+        FROM order_receipts
+        GROUP BY orderLineId
+      ) r ON r.orderLineId = l.id
+      WHERE l.itemId IS NOT NULL
+        AND l.status <> 'cancelled'
+        AND o.status NOT IN ('draft', 'cancelled')
+        AND COALESCE(r.received, 0) < l.quantityOrdered
+    `, (err, rows) => {
+      if (err) return reject(err);
+      resolve(new Set((rows || []).map(r => r.itemId)));
+    });
+  });
+}
+
+async function getReorderItems(db) {
+  const onOrderIds = await getOnOrderItemIds(db);
+
+  return new Promise((resolve, reject) => {
+    db.all(`
+      SELECT i.id, i.label, i.category, i.reorderLevel, i.reorderQty, i.muted,
              v.company AS vendorName, v.contactName, v.contactEmail, v.contactPhone
       FROM items i
       LEFT JOIN vendors v ON v.id = i.primaryVendorId
@@ -85,7 +111,10 @@ async function getReorderItems(db) {
             history.push(dailyQty(evs, dayEnd));
           }
 
-          below.push({ ...item, qty, history });
+          const manuallyMuted = !!item.muted;
+          const onOrder = onOrderIds.has(item.id);
+
+          below.push({ ...item, qty, history, manuallyMuted, onOrder, muted: manuallyMuted || onOrder });
         }
 
         resolve(below);
@@ -120,15 +149,25 @@ function barHtml(current, threshold) {
 function buildHtml(items) {
   const date = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+  const activeCount = items.filter(item => !item.muted).length;
+
   const rows = items.map(item => {
     const vendorParts = [item.vendorName, item.contactName, item.contactEmail, item.contactPhone].filter(Boolean);
     const vendor = vendorParts.length
       ? vendorParts.map(p => `<span>${esc(p)}</span>`).join(' &nbsp;&middot;&nbsp; ')
       : '<span style="color:#9ca3af;font-style:italic">No vendor assigned</span>';
 
+    const muteLabel = item.onOrder ? 'On order' : (item.manuallyMuted ? 'Muted' : '');
+    const rowStyle = item.muted
+      ? 'border-bottom:1px solid #f3f4f6;opacity:.55'
+      : 'border-bottom:1px solid #f3f4f6';
+    const nameCell = muteLabel
+      ? `${esc(item.label)} <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#9ca3af;border:1px solid #d1d5db;border-radius:3px;padding:1px 5px;margin-left:6px">${esc(muteLabel)}</span>`
+      : esc(item.label);
+
     return `
-      <tr style="border-bottom:1px solid #f3f4f6">
-        <td style="padding:10px 8px;font-weight:700">${esc(item.label)}</td>
+      <tr style="${rowStyle}">
+        <td style="padding:10px 8px;font-weight:700">${nameCell}</td>
         <td style="padding:10px 8px;text-align:center;font-weight:800;font-size:1.05em;color:${item.qty <= 0 ? '#b71c1c' : '#c62828'}">${item.qty}</td>
         <td style="padding:10px 8px;text-align:center;color:#6b7280">${item.reorderLevel}</td>
         <td style="padding:10px 8px">${barHtml(item.qty, item.reorderLevel)}</td>
@@ -148,7 +187,7 @@ function buildHtml(items) {
   </div>
   <div style="padding:20px 24px">
     <p style="margin:0 0 16px;color:#6b7280;font-size:.92rem">
-      <strong style="color:#991b1b">${items.length} item${items.length === 1 ? '' : 's'}</strong> at or below reorder threshold.
+      <strong style="color:#991b1b">${activeCount} item${activeCount === 1 ? '' : 's'}</strong> at or below reorder threshold${items.length > activeCount ? ` (plus ${items.length - activeCount} muted, shown for reference)` : ''}.
     </p>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead>
@@ -182,6 +221,9 @@ async function sendReorderEmail(db, config) {
   const items = await getReorderItems(db);
   if (!items.length) return { sent: false, reason: 'no items at or below threshold' };
 
+  const activeItems = items.filter(i => !i.muted);
+  if (!activeItems.length) return { sent: false, reason: 'all items at or below threshold are muted' };
+
   const transporter = nodemailer.createTransport({
     host: config.smtp_host,
     port: Number(config.smtp_port) || 587,
@@ -195,11 +237,11 @@ async function sendReorderEmail(db, config) {
   await transporter.sendMail({
     from: config.from || config.smtp_user,
     to: config.to,
-    subject: `[InvApp] Reorder Alert — ${items.length} item${items.length === 1 ? '' : 's'} low (${dateStr})`,
+    subject: `[InvApp] Reorder Alert — ${activeItems.length} item${activeItems.length === 1 ? '' : 's'} low (${dateStr})`,
     html
   });
 
-  return { sent: true, itemCount: items.length, items: items.map(i => i.label) };
+  return { sent: true, itemCount: activeItems.length, items: activeItems.map(i => i.label) };
 }
 
 async function runDailyCheck(db) {
@@ -228,4 +270,4 @@ async function runDailyCheck(db) {
   }
 }
 
-module.exports = { runDailyCheck, sendReorderEmail, getReorderItems, buildHtml, loadConfig, loadState };
+module.exports = { runDailyCheck, sendReorderEmail, getReorderItems, getOnOrderItemIds, buildHtml, loadConfig, loadState };

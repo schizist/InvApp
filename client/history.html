@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>InvApp — Details</title>
   <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="shortcut icon" href="/favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   <meta name="apple-mobile-web-app-title" content="InvApp" />
@@ -64,6 +63,13 @@
         <div class="field"><label for="item">Item</label><select id="item"></select></div>
         <div class="field"><label for="reorderInput">Reorder Level</label><input id="reorderInput" type="number" placeholder="Enter level" /></div>
         <div class="field"><label for="salePriceInput">Sale Price</label><input id="salePriceInput" type="number" step="0.01" placeholder="0.00" /></div>
+        <div class="field">
+          <label for="mutedInput">Mute Reorder</label>
+          <div style="display:flex;align-items:center;height:34px;gap:6px">
+            <input id="mutedInput" type="checkbox" style="width:16px;height:16px;margin:0" />
+            <span id="onOrderHint" style="display:none;font-size:.72rem;color:var(--fg-muted)">On order (auto-muted)</span>
+          </div>
+        </div>
         <div class="field"><label for="from">From Date</label><input type="date" id="from" /></div>
         <div class="field"><label for="to">To Date</label><input type="date" id="to" /></div>
         <div style="display:flex;align-items:flex-end">

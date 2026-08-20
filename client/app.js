@@ -306,7 +306,10 @@
     const btnMinus = node.querySelector('.btnMinus');
     const btnSet = node.querySelector('.btnSet');
     const badge = node.querySelector('.reorderBadge');
-    if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null){ if (sm && (sm.qty || 0) <= (it.reorderLevel || 0)) { badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; } }
+    if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null){
+      const isMuted = !!it.muted || !!it.onOrder;
+      if (!isMuted && sm && (sm.qty || 0) <= (it.reorderLevel || 0)) { badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }
+    }
     btnPlus.setAttribute('aria-label', `Add one ${unit.label} to ${it.label}`);
     btnMinus.setAttribute('aria-label', `Subtract one ${unit.label} from ${it.label}`);
     btnSet.setAttribute('aria-label', `Set absolute count for ${it.label}`);

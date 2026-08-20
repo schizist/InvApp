@@ -93,7 +93,8 @@ function initializeSchema(dbConn){
         packSize INTEGER,
         salePrice REAL,
         primaryVendorId INTEGER,
-        altVendorId INTEGER
+        altVendorId INTEGER,
+        muted INTEGER DEFAULT 0
       )
     `);
 
@@ -104,7 +105,8 @@ function initializeSchema(dbConn){
       `ALTER TABLE items ADD COLUMN packSize INTEGER`,
       `ALTER TABLE items ADD COLUMN salePrice REAL`,
       `ALTER TABLE items ADD COLUMN primaryVendorId INTEGER`,
-      `ALTER TABLE items ADD COLUMN altVendorId INTEGER`
+      `ALTER TABLE items ADD COLUMN altVendorId INTEGER`,
+      `ALTER TABLE items ADD COLUMN muted INTEGER DEFAULT 0`
     ]);
 
     dbConn.run(`

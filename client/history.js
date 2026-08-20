@@ -84,6 +84,8 @@
       o.textContent = it.label;
       if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null) o.dataset.reorder = String(it.reorderLevel);
       if (typeof it.salePrice !== 'undefined' && it.salePrice !== null) o.dataset.salePrice = String(it.salePrice);
+      o.dataset.muted = it.muted ? '1' : '0';
+      o.dataset.onOrder = it.onOrder ? '1' : '0';
       sel.appendChild(o);
     });
   }
@@ -104,6 +106,9 @@
     const opt = sel && sel.options[sel.selectedIndex];
     el('reorderInput').value = opt && opt.dataset && opt.dataset.reorder ? opt.dataset.reorder : '';
     el('salePriceInput').value = opt && opt.dataset && opt.dataset.salePrice ? opt.dataset.salePrice : '';
+    el('mutedInput').checked = !!(opt && opt.dataset && opt.dataset.muted === '1');
+    const onOrderHint = el('onOrderHint');
+    if (onOrderHint) onOrderHint.style.display = (opt && opt.dataset && opt.dataset.onOrder === '1') ? 'inline' : 'none';
   }
 
   function setSelectedItemSalePrice(value){
@@ -522,6 +527,7 @@
         const id = sel.value;
         const trimmedReorder = String(el('reorderInput').value || '').trim();
         const salePrice = normalizeNumberInput(el('salePriceInput').value);
+        const muted = !!el('mutedInput').checked;
         if (!id) return alert('Select an item');
         const reorderLevel = trimmedReorder ? parseInt(trimmedReorder,10) : null;
         if (trimmedReorder && Number.isNaN(reorderLevel)) return alert('Invalid reorder level');
@@ -529,12 +535,13 @@
           const res = await fetch('/api/items/' + encodeURIComponent(id), {
             method: 'PUT',
             headers: { 'Content-Type':'application/json' },
-            body: JSON.stringify({ reorderLevel, salePrice })
+            body: JSON.stringify({ reorderLevel, salePrice, muted })
           });
           if (!res.ok) throw new Error('update failed ' + res.status);
           const savedItem = await res.json();
           if (reorderLevel === null) delete sel.options[sel.selectedIndex].dataset.reorder;
           else sel.options[sel.selectedIndex].dataset.reorder = String(reorderLevel);
+          sel.options[sel.selectedIndex].dataset.muted = savedItem.muted ? '1' : '0';
           setSelectedItemSalePrice(Object.prototype.hasOwnProperty.call(savedItem, 'salePrice') ? savedItem.salePrice : salePrice);
           alert('Item saved');
           await show();
