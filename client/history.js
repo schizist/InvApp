@@ -1,6 +1,7 @@
 ﻿(function(){
   function qs(){ return Object.fromEntries(new URLSearchParams(location.search)); }
   function el(id){ return document.getElementById(id); }
+  const LAST_ITEM_KEY = 'invapp.history.lastItemId';
   const themeToggle = () => el('themeToggle');
   const selectedVendorByItem = {};
   let canvas, tooltip;
@@ -496,7 +497,10 @@
   window.load = async function(){
     await loadItems();
     const params = qs();
-    if (params.itemId) el('item').value = params.itemId;
+    const sel = el('item');
+    const targetId = params.itemId || localStorage.getItem(LAST_ITEM_KEY);
+    if (targetId && sel && Array.from(sel.options).some(o => o.value === targetId)) sel.value = targetId;
+    if (sel && sel.value) localStorage.setItem(LAST_ITEM_KEY, sel.value);
     const today = new Date();
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
     start.setMonth(start.getMonth() - 11);
@@ -552,6 +556,7 @@
     }
     const sel = el('item');
     if (sel) sel.addEventListener('change', async () => {
+      localStorage.setItem(LAST_ITEM_KEY, sel.value);
       syncSelectedItemInputs();
       await show();
     });

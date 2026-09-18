@@ -262,6 +262,23 @@
       const cur = document.documentElement.getAttribute('data-theme');
       applyTheme(cur === 'dark' ? 'light' : 'dark');
     });
+    const sendBtn = document.getElementById('sendReorderBtn');
+    const msgEl = document.getElementById('reorderMsg');
+    if (sendBtn) sendBtn.addEventListener('click', async () => {
+      sendBtn.disabled = true;
+      msgEl.textContent = 'Sending…';
+      try {
+        const res = await fetch('/api/reorder/send', { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) msgEl.textContent = data.error || 'Send failed';
+        else if (data.sent) msgEl.textContent = `Sent (${data.itemCount} item${data.itemCount === 1 ? '' : 's'})`;
+        else msgEl.textContent = `Not sent: ${data.reason || 'nothing to report'}`;
+      } catch (e) {
+        msgEl.textContent = 'Send failed: ' + e.message;
+      } finally {
+        sendBtn.disabled = false;
+      }
+    });
     load();
   });
 })();

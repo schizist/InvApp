@@ -34,9 +34,15 @@
   </nav>
 
   <div class="page">
-    <div style="margin-bottom:14px">
-      <h1 style="margin:0;font-size:1.2rem;font-weight:800;letter-spacing:-.02em">Stock Levels</h1>
-      <p style="margin:2px 0 0;font-size:.84rem;color:var(--fg-muted)">Current quantities by category</p>
+    <div style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div>
+        <h1 style="margin:0;font-size:1.2rem;font-weight:800;letter-spacing:-.02em">Stock Levels</h1>
+        <p style="margin:2px 0 0;font-size:.84rem;color:var(--fg-muted)">Current quantities by category</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="reorderMsg" style="font-size:.84rem;color:var(--fg-muted)"></span>
+        <button id="sendReorderBtn" class="btn" type="button">Send Reorder Report</button>
+      </div>
     </div>
     <div id="charts"></div>
   </div>

@@ -2,7 +2,32 @@
 
 Simple offline-first inventory PWA prototype (server + client).
 
-Run server:
+## Restarting the Server
+
+The server normally runs headless, started automatically by the Windows Task Scheduler task **`INVAPP Server`** (a boot trigger, 1 minute delay) which runs `C:\InvApp\start-invapp-server.bat` as user `servi`. That script just `cd`s into `server\` and runs `npm start` (`node index.js`), listening on port 3000. There's no window to close — restart it via Task Scheduler or PowerShell.
+
+**Recommended — restart the scheduled task** (PowerShell, run as the `servi` user or an admin):
+
+```powershell
+Stop-ScheduledTask -TaskName "INVAPP Server"
+Start-ScheduledTask -TaskName "INVAPP Server"
+```
+
+You can also do this from the Task Scheduler GUI: open `taskschd.msc`, find **INVAPP Server** at the root of the task library, right-click → End, then right-click → Run.
+
+**Manual fallback** — kill whatever is holding port 3000, then relaunch:
+
+```powershell
+# find and stop the process listening on port 3000
+Get-NetTCPConnection -LocalPort 3000 -State Listen | Select-Object -ExpandProperty OwningProcess | Stop-Process -Force
+
+# relaunch the same way the scheduled task does
+& "C:\InvApp\start-invapp-server.bat"
+```
+
+Note: the scheduled task only has a **Boot** trigger, so if you kill the process without going through Task Scheduler (or the batch file above), it will **not** come back until the next reboot or logon.
+
+Run server manually / for development:
 
 ```powershell
 cd "c:\Users\servi\OneDrive\Documents\CAD Designer\CODE\InvApp\server"
