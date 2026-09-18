@@ -228,7 +228,8 @@
         ctx.textBaseline = 'top';
         ctx.fillText(formatQty(d.reorder), x + barW / 2, Math.min(areaY + areaH - 12 * DPR, ry + 2 * DPR));
       }
-      bars.push({ x, y, w: barW, h: barH, item: d });
+      // Hit area is the full column (plot area + rotated label), so empty/tiny bars stay clickable.
+      bars.push({ x: x - gap / 2, y: areaY, w: barW + gap, h: canvas.height - areaY, item: d });
     });
 
     canvas.onmousemove = (ev) => {
@@ -240,7 +241,7 @@
       canvas.style.cursor = 'pointer';
       tooltip.style.display = 'block';
       tooltip.textContent = `${hit.item.label}: ${formatQty(hit.item.qty)}`;
-      tooltip.style.left = `${hit.x / DPR}px`;
+      tooltip.style.left = `${(hit.x + gap / 2) / DPR}px`;
       tooltip.style.top = '8px';
     };
     canvas.onmouseleave = () => { tooltip.style.display = 'none'; canvas.style.cursor = 'default'; };
