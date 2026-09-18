@@ -306,6 +306,7 @@
     const btnMinus = node.querySelector('.btnMinus');
     const btnSet = node.querySelector('.btnSet');
     const badge = node.querySelector('.reorderBadge');
+    node.querySelector('.favStar').style.display = it.favorite ? 'inline' : 'none';
     if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null){
       const isMuted = !!it.muted || !!it.onOrder;
       if (!isMuted && sm && (sm.qty || 0) <= (it.reorderLevel || 0)) { badge.style.display = 'inline-block'; } else { badge.style.display = 'none'; }

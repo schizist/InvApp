@@ -4,6 +4,8 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 
 const STATE_PATH = path.join(__dirname, 'reorder-state.json');
+// An item is "nearing" its threshold when on-hand is within this multiple of the reorder level.
+const NEARING_FACTOR = 1.5;
 const CONFIG_PATH = path.join(__dirname, '..', 'email-config.json');
 
 function loadState() {
@@ -76,15 +78,15 @@ async function getReorderItems(db) {
 
   return new Promise((resolve, reject) => {
     db.all(`
-      SELECT i.id, i.label, i.category, i.reorderLevel, i.reorderQty, i.muted,
+      SELECT i.id, i.label, i.category, i.reorderLevel, i.reorderQty, i.muted, i.favorite,
              v.company AS vendorName, v.contactName, v.contactEmail, v.contactPhone
       FROM items i
       LEFT JOIN vendors v ON v.id = i.primaryVendorId
-      WHERE i.reorderLevel IS NOT NULL AND i.reorderLevel > 0
+      WHERE (i.reorderLevel IS NOT NULL AND i.reorderLevel > 0) OR i.favorite = 1
       ORDER BY i.label
     `, (err, items) => {
       if (err) return reject(err);
-      if (!items.length) return resolve([]);
+      if (!items.length) return resolve({ below: [], nearing: [], favorites: [] });
 
       db.all(`SELECT itemId, type, qty, timestamp FROM events ORDER BY timestamp ASC`, (err2, allEvents) => {
         if (err2) return reject(err2);
@@ -97,11 +99,18 @@ async function getReorderItems(db) {
 
         const now = new Date();
         const below = [];
+        const nearing = [];
+        const favorites = [];
 
         for (const item of items) {
           const evs = byItem[item.id] || [];
           const qty = computeQty(evs);
-          if (qty > (item.reorderLevel || 0)) continue;
+          const level = item.reorderLevel || 0;
+          const hasLevel = level > 0;
+          const isBelow = hasLevel && qty <= level;
+          const isNearing = hasLevel && !isBelow && qty <= level * NEARING_FACTOR;
+          const isFavorite = !!item.favorite;
+          if (!isBelow && !isNearing && !isFavorite) continue;
 
           const history = [];
           for (let i = 29; i >= 0; i--) {
@@ -114,10 +123,13 @@ async function getReorderItems(db) {
           const manuallyMuted = !!item.muted;
           const onOrder = onOrderIds.has(item.id);
 
-          below.push({ ...item, qty, history, manuallyMuted, onOrder, muted: manuallyMuted || onOrder });
+          const entry = { ...item, qty, history, manuallyMuted, onOrder, favorite: isFavorite, muted: manuallyMuted || onOrder };
+          if (isBelow) below.push(entry);
+          else if (isNearing) nearing.push(entry);
+          else favorites.push(entry);
         }
 
-        resolve(below);
+        resolve({ below, nearing, favorites });
       });
     });
   });
@@ -146,35 +158,91 @@ function barHtml(current, threshold) {
   );
 }
 
-function buildHtml(items) {
-  const date = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+const STAR = '<span style="color:#d4a017" title="Favorite">&#9733;</span> ';
 
-  const activeCount = items.filter(item => !item.muted).length;
+function vendorHtml(item) {
+  const vendorParts = [item.vendorName, item.contactName, item.contactEmail, item.contactPhone].filter(Boolean);
+  return vendorParts.length
+    ? vendorParts.map(p => `<span>${esc(p)}</span>`).join(' &nbsp;&middot;&nbsp; ')
+    : '<span style="color:#9ca3af;font-style:italic">No vendor assigned</span>';
+}
 
-  const rows = items.map(item => {
-    const vendorParts = [item.vendorName, item.contactName, item.contactEmail, item.contactPhone].filter(Boolean);
-    const vendor = vendorParts.length
-      ? vendorParts.map(p => `<span>${esc(p)}</span>`).join(' &nbsp;&middot;&nbsp; ')
-      : '<span style="color:#9ca3af;font-style:italic">No vendor assigned</span>';
+function nameCellHtml(item) {
+  const muteLabel = item.onOrder ? 'On order' : (item.manuallyMuted ? 'Muted' : '');
+  const badge = muteLabel
+    ? ` <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#9ca3af;border:1px solid #d1d5db;border-radius:3px;padding:1px 5px;margin-left:6px">${esc(muteLabel)}</span>`
+    : '';
+  return `${item.favorite ? STAR : ''}${esc(item.label)}${badge}`;
+}
 
-    const muteLabel = item.onOrder ? 'On order' : (item.manuallyMuted ? 'Muted' : '');
+const THEAD = `
+      <thead>
+        <tr style="border-bottom:2px solid #e5e7eb;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">
+          <th style="padding:6px 8px;text-align:left">Item</th>
+          <th style="padding:6px 8px;text-align:center">On Hand</th>
+          <th style="padding:6px 8px;text-align:center">Threshold</th>
+          <th style="padding:6px 8px;text-align:left">Level &nbsp;<span style="font-size:9px;font-style:italic;text-transform:none">(bar = current, line = threshold)</span></th>
+          <th style="padding:6px 8px;text-align:left">30-Day Trend</th>
+          <th style="padding:6px 8px;text-align:left">Vendor</th>
+        </tr>
+      </thead>`;
+
+function sectionRows(items, qtyColor) {
+  return items.map(item => {
     const rowStyle = item.muted
       ? 'border-bottom:1px solid #f3f4f6;opacity:.55'
       : 'border-bottom:1px solid #f3f4f6';
-    const nameCell = muteLabel
-      ? `${esc(item.label)} <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#9ca3af;border:1px solid #d1d5db;border-radius:3px;padding:1px 5px;margin-left:6px">${esc(muteLabel)}</span>`
-      : esc(item.label);
-
     return `
       <tr style="${rowStyle}">
-        <td style="padding:10px 8px;font-weight:700">${nameCell}</td>
-        <td style="padding:10px 8px;text-align:center;font-weight:800;font-size:1.05em;color:${item.qty <= 0 ? '#b71c1c' : '#c62828'}">${item.qty}</td>
+        <td style="padding:10px 8px;font-weight:700">${nameCellHtml(item)}</td>
+        <td style="padding:10px 8px;text-align:center;font-weight:800;font-size:1.05em;color:${item.qty <= 0 ? '#b71c1c' : qtyColor}">${item.qty}</td>
         <td style="padding:10px 8px;text-align:center;color:#6b7280">${item.reorderLevel}</td>
         <td style="padding:10px 8px">${barHtml(item.qty, item.reorderLevel)}</td>
         <td style="padding:10px 8px;font-family:'Courier New',Courier,monospace;font-size:14px;letter-spacing:1px;color:#374151" title="30-day quantity trend (oldest → newest)">${sparkline(item.history)}</td>
-        <td style="padding:10px 8px;font-size:12px;color:#374151;line-height:1.5">${vendor}</td>
+        <td style="padding:10px 8px;font-size:12px;color:#374151;line-height:1.5">${vendorHtml(item)}</td>
       </tr>`;
   }).join('');
+}
+
+function buildHtml({ below = [], nearing = [], favorites = [] }) {
+  const date = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  const activeCount = below.filter(item => !item.muted).length;
+  const mutedCount = below.length - activeCount;
+
+  const belowSection = below.length ? `
+    <p style="margin:0 0 16px;color:#6b7280;font-size:.92rem">
+      <strong style="color:#991b1b">${activeCount} item${activeCount === 1 ? '' : 's'}</strong> at or below reorder threshold${mutedCount ? ` (plus ${mutedCount} muted, shown for reference)` : ''}.
+    </p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">${THEAD}
+      <tbody>${sectionRows(below, '#c62828')}</tbody>
+    </table>` : `
+    <p style="margin:0;color:#6b7280;font-size:.92rem">No items are at or below their reorder threshold.</p>`;
+
+  const nearingSection = nearing.length ? `
+    <h3 style="margin:28px 0 8px;font-size:.95rem;color:#b45309">Nearing reorder threshold (${nearing.length})</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">${THEAD}
+      <tbody>${sectionRows(nearing, '#b45309')}</tbody>
+    </table>` : '';
+
+  const favRows = favorites.map(item => `
+        <tr style="border-bottom:1px solid #f3f4f6">
+          <td style="padding:4px 8px">${STAR}${esc(item.label)}</td>
+          <td style="padding:4px 8px;text-align:right;font-weight:700">${item.qty}</td>
+          <td style="padding:4px 8px;text-align:right;color:#6b7280">${item.reorderLevel > 0 ? item.reorderLevel : '&mdash;'}</td>
+        </tr>`).join('');
+  const favSection = favorites.length ? `
+    <h3 style="margin:28px 0 6px;font-size:.8rem;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Favorites</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;color:#374151">
+      <thead>
+        <tr style="border-bottom:1px solid #e5e7eb;font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af">
+          <th style="padding:3px 8px;text-align:left">Item</th>
+          <th style="padding:3px 8px;text-align:right">On Hand</th>
+          <th style="padding:3px 8px;text-align:right">Threshold</th>
+        </tr>
+      </thead>
+      <tbody>${favRows}</tbody>
+    </table>` : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -185,23 +253,7 @@ function buildHtml(items) {
     <div style="font-size:1.25rem;font-weight:700;color:#fff">&#9888;&#xfe0f; Reorder Alert</div>
     <div style="margin-top:4px;color:rgba(255,255,255,.8);font-size:.9rem">${date}</div>
   </div>
-  <div style="padding:20px 24px">
-    <p style="margin:0 0 16px;color:#6b7280;font-size:.92rem">
-      <strong style="color:#991b1b">${activeCount} item${activeCount === 1 ? '' : 's'}</strong> at or below reorder threshold${items.length > activeCount ? ` (plus ${items.length - activeCount} muted, shown for reference)` : ''}.
-    </p>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead>
-        <tr style="border-bottom:2px solid #e5e7eb;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280">
-          <th style="padding:6px 8px;text-align:left">Item</th>
-          <th style="padding:6px 8px;text-align:center">On Hand</th>
-          <th style="padding:6px 8px;text-align:center">Threshold</th>
-          <th style="padding:6px 8px;text-align:left">Level &nbsp;<span style="font-size:9px;font-style:italic;text-transform:none">(bar = current, line = threshold)</span></th>
-          <th style="padding:6px 8px;text-align:left">30-Day Trend</th>
-          <th style="padding:6px 8px;text-align:left">Vendor</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
+  <div style="padding:20px 24px">${belowSection}${nearingSection}${favSection}
   </div>
   <div style="padding:12px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af">
     Sent by InvApp reorder monitor &mdash; ${new Date().toISOString()}
@@ -218,10 +270,10 @@ function esc(v) {
 }
 
 async function sendReorderEmail(db, config) {
-  const items = await getReorderItems(db);
-  if (!items.length) return { sent: false, reason: 'no items at or below threshold' };
+  const report = await getReorderItems(db);
+  if (!report.below.length) return { sent: false, reason: 'no items at or below threshold' };
 
-  const activeItems = items.filter(i => !i.muted);
+  const activeItems = report.below.filter(i => !i.muted);
   if (!activeItems.length) return { sent: false, reason: 'all items at or below threshold are muted' };
 
   const transporter = nodemailer.createTransport({
@@ -231,7 +283,7 @@ async function sendReorderEmail(db, config) {
     auth: { user: config.smtp_user, pass: process.env.SMTP_PASS || config.smtp_pass }
   });
 
-  const html = buildHtml(items);
+  const html = buildHtml(report);
   const dateStr = new Date().toLocaleDateString();
 
   await transporter.sendMail({

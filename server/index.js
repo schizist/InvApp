@@ -603,7 +603,7 @@ app.get('/api/orders/:id/sheet', (req, res) => {
 
 // GET items
 app.get('/api/items', (req, res) => {
-  db.all(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted FROM items ORDER BY label`, (err, rows) => {
+  db.all(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted,favorite FROM items ORDER BY label`, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     // compute summary and merge
     db.all(`SELECT * FROM events ORDER BY timestamp ASC`, (err2, events) => {
@@ -621,7 +621,7 @@ app.get('/api/items', (req, res) => {
           if (lastCountIndex >= 0){ qty = evs[lastCountIndex].qty; for (let j=lastCountIndex+1;j<evs.length;j++){ if (evs[j].type==='DELTA') qty += evs[j].qty; } }
           else { evs.forEach(e => { if (e.type==='DELTA') qty += e.qty; }); }
           if (evs.length>0) lastUpdate = evs[evs.length-1].timestamp;
-          return Object.assign({}, r, { muted: !!r.muted, onOrder: onOrderIds.has(r.id), qty, lastUpdate });
+          return Object.assign({}, r, { muted: !!r.muted, favorite: !!r.favorite, onOrder: onOrderIds.has(r.id), qty, lastUpdate });
         });
         res.json(out);
       }).catch(onOrderErr => res.status(500).json({ error: onOrderErr.message }));
@@ -648,10 +648,10 @@ app.post('/api/items', (req, res) => {
         if (msg.toLowerCase().includes('unique')) return res.status(409).json({ error: 'An item with that label already exists in this category.' });
         return res.status(500).json({ error: msg || 'Database error' });
       }
-      db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted FROM items WHERE id = ?`, [id], (err2, row) => {
+      db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted,favorite FROM items WHERE id = ?`, [id], (err2, row) => {
         if (err2) { console.error('POST /api/items select error:', err2.message); return res.status(500).json({ error: err2.message }); }
         if (!row) return res.status(500).json({ error: 'Item created but could not be retrieved (id: ' + id + ')' });
-        res.status(201).json(Object.assign({}, row, { muted: !!row.muted }));
+        res.status(201).json(Object.assign({}, row, { muted: !!row.muted, favorite: !!row.favorite }));
       });
     }
   );
@@ -740,10 +740,11 @@ app.get('/api/items/:id/history', (req, res) => {
 // GET single item
 app.get('/api/items/:id', (req, res) => {
   const id = req.params.id;
-  db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted FROM items WHERE id = ?`, [id], (err, row) => {
+  db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted,favorite FROM items WHERE id = ?`, [id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!row) return res.status(404).json({ error: 'not found' });
     row.muted = !!row.muted;
+    row.favorite = !!row.favorite;
     db.all(
       `SELECT id,company,contactName,contactEmail,contactPhone,onTimeScore,updatedAt
        FROM vendors
@@ -932,7 +933,7 @@ app.put('/api/items/:itemId/vendor-options/:vendorId', (req, res) => {
 // Update item fields (partial)
 app.put('/api/items/:id', (req, res) => {
   const id = req.params.id;
-  const { reorderLevel, reorderQty, label, salePrice, primaryVendorId, altVendorId, muted } = req.body || {};
+  const { reorderLevel, reorderQty, label, salePrice, primaryVendorId, altVendorId, muted, favorite } = req.body || {};
   // build dynamic set
   const sets = [];
   const params = [];
@@ -943,14 +944,15 @@ app.put('/api/items/:id', (req, res) => {
   if (typeof primaryVendorId !== 'undefined') { sets.push('primaryVendorId = ?'); params.push(primaryVendorId === null || primaryVendorId === '' ? null : Number(primaryVendorId)); }
   if (typeof altVendorId !== 'undefined') { sets.push('altVendorId = ?'); params.push(altVendorId === null || altVendorId === '' ? null : Number(altVendorId)); }
   if (typeof muted !== 'undefined') { sets.push('muted = ?'); params.push(muted ? 1 : 0); }
+  if (typeof favorite !== 'undefined') { sets.push('favorite = ?'); params.push(favorite ? 1 : 0); }
   if (sets.length === 0) return res.status(400).json({ error: 'no fields' });
   params.push(id);
   const sql = `UPDATE items SET ${sets.join(', ')} WHERE id = ?`;
   db.run(sql, params, function(err){
     if (err) return res.status(500).json({ error: err.message });
-    db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted FROM items WHERE id = ?`, [id], (err2, row) => {
+    db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted,favorite FROM items WHERE id = ?`, [id], (err2, row) => {
       if (err2) return res.status(500).json({ error: err2.message });
-      res.json(Object.assign({}, row, { muted: !!row.muted }));
+      res.json(Object.assign({}, row, { muted: !!row.muted, favorite: !!row.favorite }));
     });
   });
 });
