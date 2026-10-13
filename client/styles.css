@@ -684,3 +684,33 @@ canvas { width: 100%; height: 100%; display: block; }
   /* Receive box: two-column on small screens */
   .receiveBox { grid-template-columns: 1fr 1fr; }
 }
+
+/* ---- Toast notifications --------------------------------------- */
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  background: var(--fg);
+  color: var(--bg);
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  font-size: .86rem;
+  font-weight: 600;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.toast.toast-show {
+  opacity: 1;
+  transform: translateY(0);
+}

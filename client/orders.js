@@ -21,6 +21,24 @@
     $('themeToggle').textContent = next === 'dark' ? 'Light' : 'Dark';
   }
 
+  function toast(message, duration){
+    let stack = document.querySelector('.toast-stack');
+    if (!stack){
+      stack = document.createElement('div');
+      stack.className = 'toast-stack';
+      document.body.appendChild(stack);
+    }
+    const node = document.createElement('div');
+    node.className = 'toast';
+    node.textContent = message;
+    stack.appendChild(node);
+    requestAnimationFrame(() => node.classList.add('toast-show'));
+    setTimeout(() => {
+      node.classList.remove('toast-show');
+      setTimeout(() => node.remove(), 200);
+    }, duration || 2200);
+  }
+
   function numberValue(v){
     if (v == null || String(v).trim() === '') return null;
     const n = Number(v);
@@ -425,7 +443,7 @@
     await IDB.queueOrderChange({ id: uuid(), type: 'order', order: Object.assign({}, current, { lines: undefined }), createdAt: new Date().toISOString() });
     for (const line of current.lines) await IDB.queueOrderChange({ id: uuid(), type: 'line', line: Object.assign({}, line, { receipts: undefined }), createdAt: new Date().toISOString() });
     await loadOrders();
-    if (alertOnSave) alert('Order saved.');
+    if (alertOnSave) toast('Order saved.');
     if (navigator.onLine) syncOrders().catch(()=>{});
   }
 

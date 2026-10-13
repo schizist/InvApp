@@ -17,6 +17,24 @@
     if (lastSeries && lastSeries.length > 0) drawSeries(lastSeries);
   }
 
+  function toast(message, duration){
+    let stack = document.querySelector('.toast-stack');
+    if (!stack){
+      stack = document.createElement('div');
+      stack.className = 'toast-stack';
+      document.body.appendChild(stack);
+    }
+    const node = document.createElement('div');
+    node.className = 'toast';
+    node.textContent = message;
+    stack.appendChild(node);
+    requestAnimationFrame(() => node.classList.add('toast-show'));
+    setTimeout(() => {
+      node.classList.remove('toast-show');
+      setTimeout(() => node.remove(), 200);
+    }, duration || 2200);
+  }
+
   function parseDateInput(v, endOfDay){
     if (!v) return null;
     return new Date(v + (endOfDay ? 'T23:59:59.999' : 'T00:00:00.000'));
@@ -551,7 +569,7 @@
           sel.options[sel.selectedIndex].dataset.muted = savedItem.muted ? '1' : '0';
           sel.options[sel.selectedIndex].dataset.favorite = savedItem.favorite ? '1' : '0';
           setSelectedItemSalePrice(Object.prototype.hasOwnProperty.call(savedItem, 'salePrice') ? savedItem.salePrice : salePrice);
-          alert('Item saved');
+          toast('Item saved.');
           await show();
         }catch(e){
           alert('Failed to save item: ' + (e.message || e));
