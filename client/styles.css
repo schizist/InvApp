@@ -11,6 +11,7 @@
   --danger-fg:    #ffffff;
   --warn:         #d97706;
   --info:         #2563eb;
+  --info-fg:      #ffffff;
 
   --bg:           #f1f5f9;
   --surface:      #ffffff;
@@ -236,6 +237,8 @@ h1, h2, h3 { line-height: 1.2; }
 .btnNeutral:hover   { background: var(--surface-2); }
 .btnDanger    { background: var(--danger); color: var(--danger-fg); }
 .btnDanger:hover    { filter: brightness(1.08); }
+.btnInfo      { background: var(--info); color: var(--info-fg); }
+.btnInfo:hover      { filter: brightness(1.08); }
 
 /* ---- Panel / Card -------------------------------------------- */
 .panel, .card {

@@ -34,23 +34,43 @@
     .sectionTitle h2 { font-size: .95rem; font-weight: 800; margin: 0; }
     .sectionTitle .topActions { display: flex; gap: 6px; }
 
-    .lineCard {
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 12px;
-      margin-bottom: 8px;
-      background: var(--surface);
-      box-shadow: var(--shadow-xs);
+    /* Line items: one header row instead of repeating labels per line */
+    .linesTableWrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); }
+    .linesTable { width: 100%; border-collapse: collapse; min-width: 720px; }
+    .linesTable thead th {
+      text-align: left; font-size: .7rem; font-weight: 800; color: var(--fg-muted);
+      text-transform: uppercase; letter-spacing: .05em; padding: 8px; white-space: nowrap;
+      border-bottom: 1px solid var(--border); background: var(--surface-2);
     }
-    [data-theme="dark"] .lineCard { background: var(--surface-2); }
-    .lineGrid {
-      display: grid;
-      grid-template-columns: 1.1fr 1.6fr .6fr .5fr .8fr .8fr .7fr .8fr;
-      gap: 8px;
-      align-items: end;
+    .linesTable tbody td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .linesTable tbody tr.lineRow:hover td { background: var(--surface-2); }
+    .linesTable input { width: 100%; box-sizing: border-box; }
+    .colExpand { width: 30px; padding-left: 4px !important; padding-right: 0 !important; }
+    .colDesc { min-width: 220px; }
+    .colQty { width: 70px; }
+    .colUnit { width: 80px; }
+    .colCost { width: 100px; }
+    .colRecv { width: 130px; font-size: .85rem; white-space: nowrap; color: var(--fg-muted); }
+    .colStatus { width: 120px; }
+    .descCell { display: flex; align-items: center; gap: 6px; }
+    .itemLinkSlot { display: inline-flex; align-items: center; flex-shrink: 0; }
+    .itemLinkTag {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: .7rem; font-weight: 700; white-space: nowrap;
+      padding: 3px 8px; border-radius: 999px;
+      background: #dcfce7; color: #14532d;
     }
-    @media (max-width: 1100px) { .lineGrid { grid-template-columns: repeat(2, 1fr); } }
-    .lineGrid label { font-size: .7rem; font-weight: 800; color: var(--fg-muted); text-transform: uppercase; letter-spacing: .05em; display: block; margin-bottom: 3px; }
+    [data-theme="dark"] .itemLinkTag { background: #14532d; color: #86efac; }
+    .expandBtn {
+      background: none; border: none; cursor: pointer; font-size: .85rem;
+      color: var(--fg-muted); padding: 4px 6px; line-height: 1; border-radius: var(--radius-sm);
+    }
+    .expandBtn:hover { background: var(--surface-3); color: var(--fg); }
+    .lineDetailsRow td { background: var(--surface-2); padding: 12px 10px 16px; }
+    [data-theme="dark"] .lineDetailsRow td { background: var(--surface-3); }
+    .lineDetailsGrid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin-bottom: 10px;
+    }
 
     .receiveBox {
       margin-top: 10px;
@@ -165,9 +185,25 @@
           </div>
 
           <datalist id="itemOptions"></datalist>
-          <div id="lines"></div>
+          <div class="linesTableWrap">
+            <table class="linesTable">
+              <thead>
+                <tr>
+                  <th class="colExpand"></th>
+                  <th class="colDesc">Item / Description</th>
+                  <th class="colQty">Qty</th>
+                  <th class="colUnit">Unit</th>
+                  <th class="colCost">Unit Cost</th>
+                  <th class="colRecv">Received / Remain</th>
+                  <th class="colStatus">Status</th>
+                </tr>
+              </thead>
+              <tbody id="lines"></tbody>
+            </table>
+          </div>
 
           <div class="editor-actions">
+            <button id="receiveAllBtn"  class="btn btnInfo">Receive All</button>
             <button id="saveDraftBtn"   class="btn btnNeutral">Save Draft</button>
             <button id="markOrderedBtn" class="btn btnPrimary">Save Order</button>
             <button id="cancelOrderBtn" class="btn btnDanger">Cancel Order</button>

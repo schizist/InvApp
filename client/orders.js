@@ -240,10 +240,17 @@
     });
   }
 
+  let expandedLineIds = new Set();
+  let expandedForOrderId = null;
+
   function renderEditor(){
     $('editorEmpty').style.display = current ? 'none' : '';
     $('editor').style.display = current ? '' : 'none';
     if (!current) return;
+    if (current.id !== expandedForOrderId) {
+      expandedLineIds = new Set();
+      expandedForOrderId = current.id;
+    }
     fields.forEach(f => { if ($(f)) $(f).value = current[f] || ''; });
     renderVendorOptions();
     const vendor = selectedVendor();
@@ -258,91 +265,128 @@
     bindLineEvents();
   }
 
+  function itemLinkSlotHtml(line, idx){
+    if (line.itemId) {
+      return `<span class="itemLinkTag" title="Matches catalog item ${escapeHtml(line.itemLabel || '')}">&#10003; Linked</span>`;
+    }
+    if (isAdmin && (line.description || '').trim()) {
+      return `<button type="button" class="addNewItemBtn" data-idx="${idx}" title="Create a new catalog item">+ New item</button>`;
+    }
+    return '';
+  }
+
+  function updateItemLinkIndicator(idx){
+    const slot = $(`itemLinkSlot-${idx}`);
+    if (!slot) return;
+    const line = current.lines[idx];
+    if (!line) return;
+    slot.innerHTML = itemLinkSlotHtml(line, idx);
+    const btn = slot.querySelector('.addNewItemBtn');
+    if (btn) btn.addEventListener('click', () => openNewItemModal(Number(btn.dataset.idx)));
+  }
+
   function renderLine(line, idx){
+    const expanded = expandedLineIds.has(line.id);
     const receiptText = (line.receipts || []).length
       ? line.receipts.map(r => `${formatQty(r.quantityReceived)} on ${escapeHtml(r.receivedDate)}${r.receivedBy ? ' by ' + escapeHtml(r.receivedBy) : ''}${r.addToInventory ? ' | added to inventory' : ''}`).join('<br>')
       : 'No receipts';
-    return `
-      <div class="lineCard" data-line-id="${escapeHtml(line.id)}" data-line-index="${idx}">
-        <div class="lineGrid">
-          ${itemSelectBlock('Inventory Item', `lineItem-${idx}`, line.itemId || '', idx)}
-          ${inputBlock('Description', `lineDesc-${idx}`, line.description || '')}
-          ${inputBlock('Qty Ordered', `lineQty-${idx}`, line.quantityOrdered || '', 'type="number" step="1" min="1" inputmode="numeric"')}
-          ${inputBlock('Unit', `lineUnit-${idx}`, line.unit || '')}
-          ${inputBlock('Vendor Item #', `lineVendor-${idx}`, line.vendorItemNumber || '')}
-          ${inputBlock('Mfr Part #', `lineMfr-${idx}`, line.manufacturerPartNumber || '')}
-          ${inputBlock('Unit Cost', `lineCost-${idx}`, line.unitCost ?? '', 'type="number" step="0.01"')}
-          <div><label>Received / Remain</label><div>${formatQty(line.quantityReceived)} / ${formatQty(line.remainder)}</div><span class="badge ${escapeHtml(line.status)}">${escapeHtml(line.status.replace('_',' '))}</span></div>
-        </div>
-        <div class="lineGrid" style="margin-top:8px;grid-template-columns:1fr auto">
-          ${inputBlock('Line Notes', `lineNotes-${idx}`, line.notes || '')}
-          <button type="button" class="btn btnNeutral removeLineBtn">Remove</button>
-        </div>
-        <div class="receiveBox">
-          ${inputBlock('Quantity Received', `receiveQty-${idx}`, '', 'type="number" step="1" min="1" inputmode="numeric"')}
-          ${inputBlock('Received Date', `receiveDate-${idx}`, today(), 'type="date"')}
-          ${inputBlock('Received By', `receiveBy-${idx}`, '')}
-          ${inputBlock('Receipt Note', `receiveNote-${idx}`, '')}
-          <button type="button" class="btn btnPrimary receiveFullBtn">Receive Full</button>
-          <button type="button" class="btn btnPrimary receivePartialBtn">Receive Partial</button>
-          <button type="button" class="btn btnNeutral saveLineBtn">Save Item</button>
-        </div>
-        <div class="receipts">${receiptText}</div>
-      </div>`;
+    const mainRow = `
+      <tr class="lineRow" data-line-id="${escapeHtml(line.id)}" data-line-index="${idx}">
+        <td class="colExpand"><button type="button" class="expandBtn" aria-expanded="${expanded}" title="${expanded ? 'Hide' : 'Show'} details &amp; receiving">${expanded ? '&#9662;' : '&#9656;'}</button></td>
+        <td class="colDesc">
+          <div class="descCell">
+            <input id="lineDesc-${idx}" list="itemOptions" placeholder="What are you ordering?" value="${escapeHtml(line.description || '')}" />
+            <span class="itemLinkSlot" id="itemLinkSlot-${idx}">${itemLinkSlotHtml(line, idx)}</span>
+          </div>
+        </td>
+        <td class="colQty"><input id="lineQty-${idx}" type="number" step="1" min="1" inputmode="numeric" value="${escapeHtml(line.quantityOrdered || '')}" /></td>
+        <td class="colUnit"><input id="lineUnit-${idx}" value="${escapeHtml(line.unit || '')}" /></td>
+        <td class="colCost"><input id="lineCost-${idx}" type="number" step="0.01" value="${escapeHtml(line.unitCost ?? '')}" /></td>
+        <td class="colRecv">${formatQty(line.quantityReceived)} / ${formatQty(line.remainder)}</td>
+        <td class="colStatus"><span class="badge ${escapeHtml(line.status)}">${escapeHtml(line.status.replace('_',' '))}</span></td>
+      </tr>`;
+    const detailsRow = `
+      <tr class="lineDetailsRow" data-line-index="${idx}" style="${expanded ? '' : 'display:none'}">
+        <td></td>
+        <td colspan="6">
+          <div class="lineDetailsGrid">
+            ${inputBlock('Vendor Item #', `lineVendor-${idx}`, line.vendorItemNumber || '')}
+            ${inputBlock('Mfr Part #', `lineMfr-${idx}`, line.manufacturerPartNumber || '')}
+            ${inputBlock('Line Notes', `lineNotes-${idx}`, line.notes || '')}
+          </div>
+          <div class="receiveBox">
+            ${inputBlock('Quantity Received', `receiveQty-${idx}`, '', 'type="number" step="1" min="1" inputmode="numeric"')}
+            ${inputBlock('Received Date', `receiveDate-${idx}`, today(), 'type="date"')}
+            ${inputBlock('Received By', `receiveBy-${idx}`, '')}
+            ${inputBlock('Receipt Note', `receiveNote-${idx}`, '')}
+            <button type="button" class="btn btnPrimary receiveFullBtn">Receive Full</button>
+            <button type="button" class="btn btnPrimary receivePartialBtn">Receive Partial</button>
+            <button type="button" class="btn btnNeutral saveLineBtn">Save Item</button>
+          </div>
+          <div class="receipts">${receiptText}</div>
+          <div style="margin-top:10px"><button type="button" class="btn btnNeutral removeLineBtn">Remove line</button></div>
+        </td>
+      </tr>`;
+    return mainRow + detailsRow;
   }
 
   function inputBlock(label, id, value, attrs){
-    return `<div><label for="${id}">${label}</label><input id="${id}" ${attrs || ''} value="${escapeHtml(value)}" /></div>`;
-  }
-
-  function itemSelectBlock(label, id, value, lineIdx){
-    const options = ['<option value="">â€” none â€”</option>'].concat(items.map(item => (
-      `<option value="${escapeHtml(item.id)}" ${String(item.id) === String(value) ? 'selected' : ''}>${escapeHtml(item.label)}</option>`
-    )));
-    const addBtn = (lineIdx != null && isAdmin)
-      ? `<button type="button" class="addNewItemBtn" data-idx="${lineIdx}">+ New inventory item</button>`
-      : '';
-    return `<div><label for="${id}">${label} <span class="optional">(optional)</span></label><select id="${id}">${options.join('')}</select>${addBtn}</div>`;
+    return `<div class="field"><label for="${id}">${label}</label><input id="${id}" ${attrs || ''} value="${escapeHtml(value)}" /></div>`;
   }
 
   function bindLineEvents(){
-    $('lines').querySelectorAll('.lineCard').forEach(card => {
-      const idx = Number(card.dataset.lineIndex);
-      card.querySelectorAll('input').forEach(input => input.addEventListener('change', () => updateLineFromForm(idx)));
-      card.querySelectorAll('select').forEach(select => select.addEventListener('change', () => updateLineFromForm(idx)));
-      card.querySelector('.removeLineBtn').addEventListener('click', async () => {
-        const line = current.lines[idx];
+    $('lines').querySelectorAll('.lineRow').forEach(row => {
+      const idx = Number(row.dataset.lineIndex);
+      const line = current.lines[idx];
+      const detailsRow = $('lines').querySelector(`.lineDetailsRow[data-line-index="${idx}"]`);
+      row.querySelectorAll('input').forEach(input => input.addEventListener('change', () => updateLineFromForm(idx)));
+      if (detailsRow) detailsRow.querySelectorAll('input').forEach(input => input.addEventListener('change', () => updateLineFromForm(idx)));
+
+      const expandBtn = row.querySelector('.expandBtn');
+      if (expandBtn && detailsRow) {
+        expandBtn.addEventListener('click', () => {
+          const willExpand = detailsRow.style.display === 'none';
+          detailsRow.style.display = willExpand ? '' : 'none';
+          expandBtn.innerHTML = willExpand ? '&#9662;' : '&#9656;';
+          expandBtn.setAttribute('aria-expanded', String(willExpand));
+          if (line) {
+            if (willExpand) expandedLineIds.add(line.id);
+            else expandedLineIds.delete(line.id);
+          }
+        });
+      }
+
+      if (!detailsRow) return;
+      detailsRow.querySelector('.removeLineBtn').addEventListener('click', async () => {
         if ((line.receipts || []).length) return alert('Lines with receipt history cannot be removed.');
         current.lines.splice(idx, 1);
         await IDB.deleteOrderLine(line.id);
         await IDB.queueOrderChange({ id: uuid(), type: 'lineDelete', lineId: line.id, createdAt: new Date().toISOString() });
         renderEditor();
       });
-      card.querySelector('.receiveFullBtn').addEventListener('click', () => receiveLine(idx, true));
-      card.querySelector('.receivePartialBtn').addEventListener('click', () => receiveLine(idx, false));
-      card.querySelector('.saveLineBtn').addEventListener('click', () => saveLineItem(idx));
-      const addBtn = card.querySelector('.addNewItemBtn');
+      detailsRow.querySelector('.receiveFullBtn').addEventListener('click', () => receiveLine(idx, true));
+      detailsRow.querySelector('.receivePartialBtn').addEventListener('click', () => receiveLine(idx, false));
+      detailsRow.querySelector('.saveLineBtn').addEventListener('click', () => saveLineItem(idx));
+      const addBtn = row.querySelector('.addNewItemBtn');
       if (addBtn) addBtn.addEventListener('click', () => openNewItemModal(Number(addBtn.dataset.idx)));
     });
   }
 
   function updateLineFromForm(idx){
     const line = current.lines[idx];
-    if (!line || !$(`lineItem-${idx}`)) return;
-    const priorLabel = line.itemLabel || '';
-    const itemId = $(`lineItem-${idx}`).value.trim();
-    const found = items.find(it => it.id === itemId);
-    const quantityOrdered = wholeNumberValue($(`lineQty-${idx}`).value);
+    if (!line || !$(`lineDesc-${idx}`)) return;
     const descInput = $(`lineDesc-${idx}`);
     const unitInput = $(`lineUnit-${idx}`);
-    if (found && (!descInput.value.trim() || descInput.value.trim() === priorLabel)) descInput.value = found.label;
+    const typed = descInput.value.trim();
+    const found = items.find(it => it.label.toLowerCase() === typed.toLowerCase());
+    const quantityOrdered = wholeNumberValue($(`lineQty-${idx}`).value);
     if (found) {
       const unitInfo = itemUnitInfo(found);
       if (!unitInput.value.trim() || unitInput.value === 'pcs') unitInput.value = unitInfo.unit;
     }
     line.itemLabel = found ? found.label : '';
     line.itemId = found ? found.id : null;
-    line.description = descInput.value.trim() || (found ? found.label : '');
+    line.description = typed || (found ? found.label : '');
     line.quantityOrdered = quantityOrdered || 0;
     line.unit = unitInput.value.trim();
     line.vendorItemNumber = $(`lineVendor-${idx}`).value.trim();
@@ -353,6 +397,7 @@
     line.quantityReceived = (line.receipts || []).reduce((sum, receipt) => sum + (Number(receipt.quantityReceived) || 0), 0);
     line.remainder = Math.max(0, (Number(line.quantityOrdered) || 0) - line.quantityReceived);
     line.status = computeLineStatus(line, line.quantityReceived, Number(line.quantityOrdered) || 0);
+    updateItemLinkIndicator(idx);
   }
 
   function inventoryEventForReceipt(line, receipt){
@@ -401,6 +446,46 @@
     line.status = computeLineStatus(line, line.quantityReceived, Number(line.quantityOrdered) || 0);
     await saveCurrent(current.status, false);
     await IDB.queueOrderChange({ id: uuid(), type: 'receipt', receipt, createdAt: new Date().toISOString() });
+    if (navigator.onLine) syncOrders().catch(()=>{});
+  }
+
+  async function receiveAllLines(){
+    if (!current) return;
+    current.lines.forEach((_line, idx) => updateLineFromForm(idx));
+    const eligible = current.lines.filter(line => line.status !== 'cancelled' && Number(line.remainder) > 0);
+    if (!eligible.length) { alert('Nothing to receive — no lines have a remaining quantity.'); return; }
+
+    if (!confirm(`Receive the full remaining quantity for ${eligible.length} line item${eligible.length === 1 ? '' : 's'}?`)) return;
+
+    const anyLinked = eligible.some(line => line.itemId);
+    const addToInventory = anyLinked
+      ? confirm('Add the received quantities to inventory for all linked items in this batch?')
+      : false;
+
+    const receivedDate = today();
+    let count = 0;
+    for (const line of eligible) {
+      const qty = Math.max(0, Number(line.remainder) || 0);
+      if (!qty) continue;
+      const receipt = {
+        id: uuid(), orderId: current.id, orderLineId: line.id, quantityReceived: qty,
+        receivedDate, receivedBy: '', note: '',
+        addToInventory: addToInventory && !!line.itemId,
+        createdAt: new Date().toISOString()
+      };
+      await IDB.putOrderReceipt(receipt);
+      const invEvent = inventoryEventForReceipt(line, receipt);
+      if (receipt.addToInventory && invEvent) await IDB.addEvent(invEvent);
+      line.receipts = (line.receipts || []).concat(receipt);
+      line.quantityReceived = (Number(line.quantityReceived) || 0) + qty;
+      line.remainder = (Number(line.quantityOrdered) || 0) - line.quantityReceived;
+      line.status = computeLineStatus(line, line.quantityReceived, Number(line.quantityOrdered) || 0);
+      await IDB.queueOrderChange({ id: uuid(), type: 'receipt', receipt, createdAt: new Date().toISOString() });
+      count++;
+    }
+
+    await saveCurrent(current.status, false);
+    toast(`Received ${count} line item${count === 1 ? '' : 's'}.`);
     if (navigator.onLine) syncOrders().catch(()=>{});
   }
 
@@ -636,6 +721,7 @@
   $('duplicateBtn').addEventListener('click', duplicateOrder);
   $('sheetBtn').addEventListener('click', generateSheet);
   $('addLineBtn').addEventListener('click', addLine);
+  $('receiveAllBtn').addEventListener('click', () => receiveAllLines());
   $('saveDraftBtn').addEventListener('click', () => saveCurrent('draft', true));
   $('markOrderedBtn').addEventListener('click', () => saveCurrent('ordered', true));
   $('cancelOrderBtn').addEventListener('click', () => saveCurrent('cancelled', true));
