@@ -13,6 +13,7 @@
   let items = [];
   let vendors = [];
   let current = null;
+  let isAdmin = false;
 
   function applyTheme(t){
     const next = t === 'dark' ? 'dark' : 'light';
@@ -298,7 +299,7 @@
     const options = ['<option value="">â€” none â€”</option>'].concat(items.map(item => (
       `<option value="${escapeHtml(item.id)}" ${String(item.id) === String(value) ? 'selected' : ''}>${escapeHtml(item.label)}</option>`
     )));
-    const addBtn = lineIdx != null
+    const addBtn = (lineIdx != null && isAdmin)
       ? `<button type="button" class="addNewItemBtn" data-idx="${lineIdx}">+ New inventory item</button>`
       : '';
     return `<div><label for="${id}">${label} <span class="optional">(optional)</span></label><select id="${id}">${options.join('')}</select>${addBtn}</div>`;
@@ -651,6 +652,8 @@
   window.addEventListener('online', () => syncOrders().catch(()=>{}));
 
   applyTheme(localStorage.getItem('invapp.theme') === 'dark' ? 'dark' : 'light');
+  const authUser = window.InvAppAuth ? await window.InvAppAuth.ready : null;
+  isAdmin = !!(authUser && authUser.isAdmin);
   await loadItems();
   await loadVendors();
   await loadOrders();

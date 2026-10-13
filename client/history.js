@@ -549,23 +549,34 @@
       saveBtn.addEventListener('click', async () => {
         const sel = el('item');
         const id = sel.value;
-        const trimmedReorder = String(el('reorderInput').value || '').trim();
-        const salePrice = normalizeNumberInput(el('salePriceInput').value);
         const muted = !!el('mutedInput').checked;
         const favorite = !!el('favoriteInput').checked;
         if (!id) return alert('Select an item');
-        const reorderLevel = trimmedReorder ? parseInt(trimmedReorder,10) : null;
-        if (trimmedReorder && Number.isNaN(reorderLevel)) return alert('Invalid reorder level');
+        const authUser = window.InvAppAuth ? await window.InvAppAuth.ready : null;
+        const isAdmin = !!(authUser && authUser.isAdmin);
+        const payload = { muted, favorite };
+        let reorderLevel = null;
+        let salePrice = null;
+        if (isAdmin){
+          const trimmedReorder = String(el('reorderInput').value || '').trim();
+          salePrice = normalizeNumberInput(el('salePriceInput').value);
+          reorderLevel = trimmedReorder ? parseInt(trimmedReorder,10) : null;
+          if (trimmedReorder && Number.isNaN(reorderLevel)) return alert('Invalid reorder level');
+          payload.reorderLevel = reorderLevel;
+          payload.salePrice = salePrice;
+        }
         try{
           const res = await fetch('/api/items/' + encodeURIComponent(id), {
             method: 'PUT',
             headers: { 'Content-Type':'application/json' },
-            body: JSON.stringify({ reorderLevel, salePrice, muted, favorite })
+            body: JSON.stringify(payload)
           });
           if (!res.ok) throw new Error('update failed ' + res.status);
           const savedItem = await res.json();
-          if (reorderLevel === null) delete sel.options[sel.selectedIndex].dataset.reorder;
-          else sel.options[sel.selectedIndex].dataset.reorder = String(reorderLevel);
+          if (isAdmin){
+            if (reorderLevel === null) delete sel.options[sel.selectedIndex].dataset.reorder;
+            else sel.options[sel.selectedIndex].dataset.reorder = String(reorderLevel);
+          }
           sel.options[sel.selectedIndex].dataset.muted = savedItem.muted ? '1' : '0';
           sel.options[sel.selectedIndex].dataset.favorite = savedItem.favorite ? '1' : '0';
           setSelectedItemSalePrice(Object.prototype.hasOwnProperty.call(savedItem, 'salePrice') ? savedItem.salePrice : salePrice);

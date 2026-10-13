@@ -14,6 +14,7 @@ const {
 } = require('./db');
 
 const reorder = require('./reorder');
+const { requireAuth, requireAdmin, logActivity, registerAuthRoutes } = require('./auth');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -31,6 +32,8 @@ app.use((req, res, next) => {
 
 // Serve client static files
 app.use('/', express.static(path.join(__dirname, '..', 'client')));
+
+registerAuthRoutes(app);
 
 const ORDER_STATUSES = new Set(['draft', 'ordered', 'partially_received', 'received', 'cancelled']);
 const ORDER_LINE_STATUSES = new Set(['pending', 'partially_received', 'complete', 'cancelled']);
@@ -188,7 +191,6 @@ function escapeHtml(value){
 
 const COMPANY_NAME = 'PEAK CORROSION CONTROL, INC.';
 const COMPANY_PHONE = '(520) 722-7484';
-const COMPANY_FAX = '(520) 722-0293';
 const COMPANY_ADDRESS_LINE1 = '887 S Warren Ave.';
 const COMPANY_ADDRESS_LINE2 = 'Tucson, AZ 85711';
 const COMPANY_EMAIL = 'daniel@peakcorrosion.com';
@@ -196,6 +198,24 @@ const COMPANY_EMAIL = 'daniel@peakcorrosion.com';
 function formatMoney(value){
   const n = Number(value);
   return Number.isFinite(n) ? `$${n.toFixed(2)}` : '';
+}
+
+// Map an alias stored on an order (e.g. "DC") to the user's full name for display.
+// Falls back to the raw alias if it doesn't match a known user.
+function resolveUserName(alias, usersByAlias){
+  const trimmed = String(alias || '').trim();
+  if (!trimmed) return '';
+  const match = usersByAlias && usersByAlias[trimmed.toUpperCase()];
+  return match ? match.fullName : trimmed;
+}
+
+function getUsersByAlias(cb){
+  db.all(`SELECT id,email,alias,fullName,updatedAt FROM users`, (err, rows) => {
+    if (err) return cb(err);
+    const byAlias = {};
+    (rows || []).forEach(u => { byAlias[String(u.alias || '').toUpperCase()] = u; });
+    cb(null, byAlias);
+  });
 }
 
 // For any line missing a unitCost, look up the most recent unitCost previously
@@ -223,7 +243,7 @@ function fillLastUnitCosts(order, cb){
   });
 }
 
-function renderOrderSheet(order){
+function renderOrderSheet(order, usersByAlias){
   let total = 0;
   let totalKnown = false;
   const rows = (order.lines || []).map(line => {
@@ -231,16 +251,20 @@ function renderOrderSheet(order){
     const qty = Number(line.quantityOrdered) || 0;
     const lineTotal = unitCost !== null ? qty * unitCost : null;
     if (lineTotal !== null) { total += lineTotal; totalKnown = true; }
+    const description = line.vendorItemNumber
+      ? `${escapeHtml(line.description)} <span class="vendorItemNo">(Vendor #: ${escapeHtml(line.vendorItemNumber)})</span>`
+      : escapeHtml(line.description);
     return `
       <tr>
         <td class="qty">${escapeHtml(line.quantityOrdered)}</td>
-        <td class="desc">${escapeHtml(line.description)}</td>
+        <td class="desc">${description}</td>
         <td class="money">${unitCost !== null ? formatMoney(unitCost) : ''}</td>
         <td class="money">${lineTotal !== null ? formatMoney(lineTotal) : ''}</td>
       </tr>
     `;
   }).join('');
-  const shipAttn = order.orderedBy || order.enteredBy || 'Daniel Corron';
+  const fromName = resolveUserName(order.orderedBy, usersByAlias) || resolveUserName(order.enteredBy, usersByAlias) || 'Daniel Corron';
+  const shipAttn = fromName;
   return `<!doctype html>
 <html>
 <head>
@@ -263,6 +287,7 @@ function renderOrderSheet(order){
     th,td{border:1px solid #111;padding:7px;vertical-align:top}
     th{font-size:12px;background:#f1f1f1;text-align:left}
     td.qty{width:70px;text-align:center}
+    .vendorItemNo{color:#555;font-size:12px}
     td.money, th.money{width:110px;text-align:right}
     .totalRow td{font-weight:bold;text-align:right}
     .totalRow td.totalLabel{text-align:right}
@@ -277,14 +302,14 @@ function renderOrderSheet(order){
     <img src="/PeakLogo.svg" onerror="this.style.display='none'" alt="" />
     <div>
       <div class="companyName">${escapeHtml(COMPANY_NAME)}</div>
-      <div class="companyDetails">${escapeHtml(COMPANY_PHONE)} &nbsp;|&nbsp; FAX ${escapeHtml(COMPANY_FAX)}</div>
+      <div class="companyDetails">${escapeHtml(COMPANY_PHONE)}</div>
       <div class="companyDetails">${escapeHtml(COMPANY_ADDRESS_LINE1)}, ${escapeHtml(COMPANY_ADDRESS_LINE2)} &nbsp;|&nbsp; ${escapeHtml(COMPANY_EMAIL)}</div>
     </div>
   </div>
-  <h1>LETTER OF TRANSMITTAL / FACSIMILE</h1>
+  <h1>LETTER OF TRANSMITTAL</h1>
   <div class="infoGrid">
     <div><span class="label">ATTN:</span> ${escapeHtml(order.vendorName)}</div>
-    <div><span class="label">FROM:</span> ${escapeHtml(order.orderedBy || order.enteredBy || 'Daniel Corron')}</div>
+    <div><span class="label">FROM:</span> ${escapeHtml(fromName)}</div>
     <div><span class="label">EMAIL:</span> ${escapeHtml(order.vendorEmail || '-')}</div>
     <div><span class="label">PHONE:</span> ${escapeHtml(COMPANY_PHONE)}</div>
     <div><span class="label">PHONE:</span> ${escapeHtml(order.vendorPhone || '-')}</div>
@@ -321,7 +346,7 @@ function renderOrderSheet(order){
 }
 
 // List databases and current selection
-app.get('/api/databases', (_req, res) => {
+app.get('/api/databases', requireAdmin, (_req, res) => {
   try{
     res.json({
       current: getCurrentDatabaseName(),
@@ -333,10 +358,11 @@ app.get('/api/databases', (_req, res) => {
 });
 
 // Create and switch to a new database
-app.post('/api/databases', (req, res) => {
+app.post('/api/databases', requireAdmin, (req, res) => {
   try{
     const name = (req.body && req.body.name) ? String(req.body.name) : '';
     const current = createDatabase(name);
+    logActivity(req.user, 'create', 'database', current, `${req.user.fullName} created database "${current}"`);
     res.status(201).json({
       current,
       databases: listDatabases()
@@ -347,10 +373,11 @@ app.post('/api/databases', (req, res) => {
 });
 
 // Switch active database
-app.put('/api/databases/current', (req, res) => {
+app.put('/api/databases/current', requireAdmin, (req, res) => {
   try{
     const name = (req.body && req.body.name) ? String(req.body.name) : '';
     const current = switchDatabase(name);
+    logActivity(req.user, 'update', 'database', current, `${req.user.fullName} switched active database to "${current}"`);
     res.json({
       current,
       databases: listDatabases()
@@ -360,7 +387,7 @@ app.put('/api/databases/current', (req, res) => {
   }
 });
 
-app.get('/api/orders', (_req, res) => {
+app.get('/api/orders', requireAuth, (_req, res) => {
   db.all(`SELECT * FROM orders ORDER BY orderDate DESC, updatedAt DESC`, (err, orders) => {
     if (err) return res.status(500).json({ error: err.message });
     db.all(`SELECT * FROM order_lines`, (lineErr, lines) => {
@@ -383,7 +410,7 @@ app.get('/api/orders', (_req, res) => {
   });
 });
 
-app.get('/api/orders/:id', (req, res) => {
+app.get('/api/orders/:id', requireAuth, (req, res) => {
   readOrder(req.params.id, (err, order) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!order) return res.status(404).json({ error: 'not found' });
@@ -391,7 +418,7 @@ app.get('/api/orders/:id', (req, res) => {
   });
 });
 
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', requireAuth, (req, res) => {
   const body = req.body || {};
   const id = String(body.id || generateId());
   const input = Object.assign({}, body, { id });
@@ -426,6 +453,7 @@ app.post('/api/orders', (req, res) => {
       if (err) return res.status(400).json({ error: err.message });
       readOrder(order.id, (readErr, saved) => {
         if (readErr) return res.status(500).json({ error: readErr.message });
+        logActivity(req.user, 'create', 'order', order.id, `${req.user.fullName} created order ${order.poNumber} (${order.vendorName})`);
         res.status(201).json(saved);
       });
     });
@@ -437,7 +465,7 @@ app.post('/api/orders', (req, res) => {
   });
 });
 
-app.put('/api/orders/:id', (req, res) => {
+app.put('/api/orders/:id', requireAuth, (req, res) => {
   db.get(`SELECT * FROM orders WHERE id = ?`, [req.params.id], (findErr, existing) => {
     if (findErr) return res.status(500).json({ error: findErr.message });
     if (!existing) return res.status(404).json({ error: 'not found' });
@@ -460,6 +488,7 @@ app.put('/api/orders/:id', (req, res) => {
       updateOrderStatus(order.id, () => {
         readOrder(order.id, (readErr, saved) => {
           if (readErr) return res.status(500).json({ error: readErr.message });
+          logActivity(req.user, 'update', 'order', order.id, `${req.user.fullName} updated order ${order.poNumber}`);
           res.json(saved);
         });
       });
@@ -467,7 +496,7 @@ app.put('/api/orders/:id', (req, res) => {
   });
 });
 
-app.delete('/api/orders/:id', (req, res) => {
+app.delete('/api/orders/:id', requireAuth, (req, res) => {
   const orderId = req.params.id;
   db.get(`SELECT id FROM orders WHERE id = ?`, [orderId], (findErr, existing) => {
     if (findErr) return res.status(500).json({ error: findErr.message });
@@ -481,6 +510,7 @@ app.delete('/api/orders/:id', (req, res) => {
             if (lineErr) return res.status(500).json({ error: lineErr.message });
             db.run(`DELETE FROM orders WHERE id = ?`, [orderId], function(orderErr){
               if (orderErr) return res.status(500).json({ error: orderErr.message });
+              logActivity(req.user, 'delete', 'order', orderId, `${req.user.fullName} deleted order ${orderId}`);
               res.json({ deleted: this.changes || 0 });
             });
           });
@@ -490,7 +520,7 @@ app.delete('/api/orders/:id', (req, res) => {
   });
 });
 
-function upsertOrderLine(body, orderId, res, statusCode){
+function upsertOrderLine(body, orderId, res, statusCode, user){
   const quantityOrdered = normalizeNumber(body.quantityOrdered);
   if (!quantityOrdered || quantityOrdered <= 0) return res.status(400).json({ error: 'quantityOrdered must be positive' });
   if (!Number.isInteger(quantityOrdered)) return res.status(400).json({ error: 'quantityOrdered must be a whole number' });
@@ -537,6 +567,7 @@ function upsertOrderLine(body, orderId, res, statusCode){
     updateOrderStatus(orderId, () => {
       readOrder(orderId, (readErr, order) => {
         if (readErr) return res.status(500).json({ error: readErr.message });
+        logActivity(user, statusCode === 201 ? 'create' : 'update', 'order_line', body.id, `${user.fullName} ${statusCode === 201 ? 'added' : 'updated'} line "${description}" on order ${orderId}`);
         res.status(statusCode).json(order);
       });
     });
@@ -571,23 +602,23 @@ function createInventoryEventForReceipt(line, receipt, cb){
   });
 }
 
-app.post('/api/orders/:id/lines', (req, res) => {
+app.post('/api/orders/:id/lines', requireAuth, (req, res) => {
   db.get(`SELECT id FROM orders WHERE id = ?`, [req.params.id], (err, order) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!order) return res.status(404).json({ error: 'order not found' });
-    upsertOrderLine(req.body || {}, req.params.id, res, 201);
+    upsertOrderLine(req.body || {}, req.params.id, res, 201, req.user);
   });
 });
 
-app.put('/api/order-lines/:id', (req, res) => {
+app.put('/api/order-lines/:id', requireAuth, (req, res) => {
   db.get(`SELECT * FROM order_lines WHERE id = ?`, [req.params.id], (err, existing) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!existing) return res.status(404).json({ error: 'not found' });
-    upsertOrderLine(Object.assign({}, existing, req.body || {}, { id: req.params.id }), existing.orderId, res, 200);
+    upsertOrderLine(Object.assign({}, existing, req.body || {}, { id: req.params.id }), existing.orderId, res, 200, req.user);
   });
 });
 
-app.delete('/api/order-lines/:id', (req, res) => {
+app.delete('/api/order-lines/:id', requireAuth, (req, res) => {
   db.get(`SELECT * FROM order_lines WHERE id = ?`, [req.params.id], (err, existing) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!existing) return res.json({ deleted: 0 });
@@ -596,13 +627,14 @@ app.delete('/api/order-lines/:id', (req, res) => {
       if ((row && row.receiptCount) > 0) return res.status(400).json({ error: 'cannot delete a line with receipt history' });
       db.run(`DELETE FROM order_lines WHERE id = ?`, [req.params.id], deleteErr => {
         if (deleteErr) return res.status(500).json({ error: deleteErr.message });
+        logActivity(req.user, 'delete', 'order_line', req.params.id, `${req.user.fullName} deleted line "${existing.description}" on order ${existing.orderId}`);
         updateOrderStatus(existing.orderId, () => res.json({ deleted: 1, orderId: existing.orderId }));
       });
     });
   });
 });
 
-app.post('/api/order-lines/:id/receipts', (req, res) => {
+app.post('/api/order-lines/:id/receipts', requireAuth, (req, res) => {
   db.get(`SELECT * FROM order_lines WHERE id = ?`, [req.params.id], (lineErr, line) => {
     if (lineErr) return res.status(500).json({ error: lineErr.message });
     if (!line) return res.status(404).json({ error: 'line not found' });
@@ -636,6 +668,7 @@ app.post('/api/order-lines/:id/receipts', (req, res) => {
         updateOrderStatus(line.orderId, () => {
           readOrder(line.orderId, (readErr, order) => {
             if (readErr) return res.status(500).json({ error: readErr.message });
+            logActivity(req.user, 'create', 'order_receipt', receipt.id, `${req.user.fullName} received ${receipt.quantityReceived} of "${line.description}" on order ${line.orderId}`);
             res.status(201).json(order);
           });
         });
@@ -649,19 +682,22 @@ app.post('/api/order-lines/:id/receipts', (req, res) => {
   });
 });
 
-app.get('/api/orders/:id/sheet', (req, res) => {
+app.get('/api/orders/:id/sheet', requireAuth, (req, res) => {
   readOrder(req.params.id, (err, order) => {
     if (err) return res.status(500).send(err.message);
     if (!order) return res.status(404).send('not found');
     fillLastUnitCosts(order, (fillErr, filled) => {
       if (fillErr) return res.status(500).send(fillErr.message);
-      res.type('html').send(renderOrderSheet(filled));
+      getUsersByAlias((usersErr, usersByAlias) => {
+        if (usersErr) return res.status(500).send(usersErr.message);
+        res.type('html').send(renderOrderSheet(filled, usersByAlias));
+      });
     });
   });
 });
 
 // GET items
-app.get('/api/items', (req, res) => {
+app.get('/api/items', requireAuth, (req, res) => {
   db.all(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted,favorite FROM items ORDER BY label`, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     // compute summary and merge
@@ -688,8 +724,8 @@ app.get('/api/items', (req, res) => {
   });
 });
 
-// POST items — create a new catalog item
-app.post('/api/items', (req, res) => {
+// POST items — create a new catalog item (master data: admin only)
+app.post('/api/items', requireAdmin, (req, res) => {
   const { label, category, unit, packSize } = req.body || {};
   if (!label || !String(label).trim()) return res.status(400).json({ error: 'label is required' });
   const cleanLabel = String(label).trim();
@@ -710,14 +746,15 @@ app.post('/api/items', (req, res) => {
       db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted,favorite FROM items WHERE id = ?`, [id], (err2, row) => {
         if (err2) { console.error('POST /api/items select error:', err2.message); return res.status(500).json({ error: err2.message }); }
         if (!row) return res.status(500).json({ error: 'Item created but could not be retrieved (id: ' + id + ')' });
+        logActivity(req.user, 'create', 'item', id, `${req.user.fullName} created item "${cleanLabel}"`);
         res.status(201).json(Object.assign({}, row, { muted: !!row.muted, favorite: !!row.favorite }));
       });
     }
   );
 });
 
-// POST events (accept array)
-app.post('/api/events', (req, res) => {
+// POST events (accept array) — routine stock counts/receipts: any signed-in user
+app.post('/api/events', requireAuth, (req, res) => {
   const events = Array.isArray(req.body) ? req.body : [req.body];
   let inserted = 0;
   let ignored = 0;
@@ -741,13 +778,14 @@ app.post('/api/events', (req, res) => {
       }
     });
     stmt.finalize(() => {
+      if (inserted > 0) logActivity(req.user, 'create', 'event', null, `${req.user.fullName} recorded ${inserted} inventory event${inserted === 1 ? '' : 's'}`);
       res.json({ inserted, ignored });
     });
   });
 });
 
 // GET events since timestamp
-app.get('/api/events', (req, res) => {
+app.get('/api/events', requireAuth, (req, res) => {
   const since = req.query.since;
   if (since) {
     db.all(`SELECT * FROM events WHERE timestamp > ? ORDER BY timestamp ASC`, [since], (err, rows) => {
@@ -763,7 +801,7 @@ app.get('/api/events', (req, res) => {
 });
 
 // GET item history and time series
-app.get('/api/items/:id/history', (req, res) => {
+app.get('/api/items/:id/history', requireAuth, (req, res) => {
   const id = req.params.id;
   const from = req.query.from ? new Date(req.query.from) : null;
   const to = req.query.to ? new Date(req.query.to) : null;
@@ -797,7 +835,7 @@ app.get('/api/items/:id/history', (req, res) => {
 });
 
 // GET single item
-app.get('/api/items/:id', (req, res) => {
+app.get('/api/items/:id', requireAuth, (req, res) => {
   const id = req.params.id;
   db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted,favorite FROM items WHERE id = ?`, [id], (err, row) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -845,7 +883,7 @@ app.get('/api/items/:id', (req, res) => {
 });
 
 // Get all vendors
-app.get('/api/vendors', (req, res) => {
+app.get('/api/vendors', requireAuth, (req, res) => {
   db.all(
     `SELECT id,company,contactName,contactEmail,contactPhone,onTimeScore,updatedAt FROM vendors ORDER BY company ASC`,
     (err, rows) => {
@@ -856,7 +894,7 @@ app.get('/api/vendors', (req, res) => {
 });
 
 // Create vendor
-app.post('/api/vendors', (req, res) => {
+app.post('/api/vendors', requireAdmin, (req, res) => {
   const body = req.body || {};
   const company = (body.company || '').trim();
   if (!company) return res.status(400).json({ error: 'company is required' });
@@ -871,6 +909,7 @@ app.post('/api/vendors', (req, res) => {
         [this.lastID],
         (readErr, row) => {
           if (readErr) return res.status(500).json({ error: readErr.message });
+          logActivity(req.user, 'create', 'vendor', row.id, `${req.user.fullName} created vendor "${row.company}"`);
           res.status(201).json(row);
         }
       );
@@ -879,7 +918,7 @@ app.post('/api/vendors', (req, res) => {
 });
 
 // Update vendor fields (partial)
-app.put('/api/vendors/:id', (req, res) => {
+app.put('/api/vendors/:id', requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid vendor id' });
   const { company, contactName, contactEmail, contactPhone, onTimeScore } = req.body || {};
@@ -907,6 +946,7 @@ app.put('/api/vendors/:id', (req, res) => {
       [id],
       (readErr, row) => {
         if (readErr) return res.status(500).json({ error: readErr.message });
+        logActivity(req.user, 'update', 'vendor', id, `${req.user.fullName} updated vendor "${row.company}"`);
         res.json(row);
       }
     );
@@ -914,7 +954,7 @@ app.put('/api/vendors/:id', (req, res) => {
 });
 
 // Delete vendor
-app.delete('/api/vendors/:id', (req, res) => {
+app.delete('/api/vendors/:id', requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid vendor id' });
   db.serialize(() => {
@@ -923,14 +963,98 @@ app.delete('/api/vendors/:id', (req, res) => {
       db.run(`DELETE FROM vendors WHERE id = ?`, [id], function(err){
         if (err) return res.status(500).json({ error: err.message });
         if (!this.changes) return res.status(404).json({ error: 'not found' });
+        logActivity(req.user, 'delete', 'vendor', id, `${req.user.fullName} deleted vendor ${id}`);
         res.json({ deleted: 1 });
       });
     });
   });
 });
 
-// Upsert item/vendor specific values
-app.put('/api/items/:itemId/vendor-options/:vendorId', (req, res) => {
+// Get all users
+app.get('/api/users', requireAuth, (req, res) => {
+  db.all(
+    `SELECT id,email,alias,fullName,isAdmin,updatedAt FROM users ORDER BY fullName ASC`,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json((rows || []).map(r => Object.assign({}, r, { isAdmin: !!r.isAdmin })));
+    }
+  );
+});
+
+// Create user
+app.post('/api/users', requireAdmin, (req, res) => {
+  const body = req.body || {};
+  const email = (body.email || '').trim();
+  const alias = (body.alias || '').trim().toUpperCase();
+  const fullName = (body.fullName || '').trim();
+  const isAdmin = body.isAdmin ? 1 : 0;
+  if (!email) return res.status(400).json({ error: 'email is required' });
+  if (!alias || alias.length < 2 || alias.length > 3) return res.status(400).json({ error: 'alias must be 2-3 characters' });
+  if (!fullName) return res.status(400).json({ error: 'fullName is required' });
+  const now = new Date().toISOString();
+  db.run(
+    `INSERT INTO users (email, alias, fullName, isAdmin, updatedAt) VALUES (?, ?, ?, ?, ?)`,
+    [email, alias, fullName, isAdmin, now],
+    function(err){
+      if (err) return res.status(400).json({ error: err.message });
+      db.get(`SELECT id,email,alias,fullName,isAdmin,updatedAt FROM users WHERE id = ?`, [this.lastID], (readErr, row) => {
+        if (readErr) return res.status(500).json({ error: readErr.message });
+        logActivity(req.user, 'create', 'user', row.id, `${req.user.fullName} added user "${row.fullName}" (${row.alias})`);
+        res.status(201).json(Object.assign({}, row, { isAdmin: !!row.isAdmin }));
+      });
+    }
+  );
+});
+
+// Update user fields (partial) — alias and admin status are admin-editable
+app.put('/api/users/:id', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid user id' });
+  const { email, alias, fullName, isAdmin } = req.body || {};
+
+  const sets = [];
+  const params = [];
+
+  if (typeof email !== 'undefined') { sets.push('email = ?'); params.push(String(email || '').trim()); }
+  if (typeof alias !== 'undefined') {
+    const trimmedAlias = String(alias || '').trim().toUpperCase();
+    if (!trimmedAlias || trimmedAlias.length < 2 || trimmedAlias.length > 3) return res.status(400).json({ error: 'alias must be 2-3 characters' });
+    sets.push('alias = ?'); params.push(trimmedAlias);
+  }
+  if (typeof fullName !== 'undefined') { sets.push('fullName = ?'); params.push(String(fullName || '').trim()); }
+  if (typeof isAdmin !== 'undefined') { sets.push('isAdmin = ?'); params.push(isAdmin ? 1 : 0); }
+
+  if (sets.length === 0) return res.status(400).json({ error: 'no fields' });
+  sets.push('updatedAt = ?');
+  params.push(new Date().toISOString());
+  params.push(id);
+
+  const sql = `UPDATE users SET ${sets.join(', ')} WHERE id = ?`;
+  db.run(sql, params, function(err){
+    if (err) return res.status(400).json({ error: err.message });
+    if (!this.changes) return res.status(404).json({ error: 'not found' });
+    db.get(`SELECT id,email,alias,fullName,isAdmin,updatedAt FROM users WHERE id = ?`, [id], (readErr, row) => {
+      if (readErr) return res.status(500).json({ error: readErr.message });
+      logActivity(req.user, 'update', 'user', id, `${req.user.fullName} updated user "${row.fullName}"`);
+      res.json(Object.assign({}, row, { isAdmin: !!row.isAdmin }));
+    });
+  });
+});
+
+// Delete user
+app.delete('/api/users/:id', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid user id' });
+  db.run(`DELETE FROM users WHERE id = ?`, [id], function(err){
+    if (err) return res.status(500).json({ error: err.message });
+    if (!this.changes) return res.status(404).json({ error: 'not found' });
+    logActivity(req.user, 'delete', 'user', id, `${req.user.fullName} deleted user ${id}`);
+    res.json({ deleted: 1 });
+  });
+});
+
+// Upsert item/vendor specific values (vendor pricing on a material: admin only)
+app.put('/api/items/:itemId/vendor-options/:vendorId', requireAdmin, (req, res) => {
   const itemId = req.params.itemId;
   const vendorId = Number(req.params.vendorId);
   if (!itemId) return res.status(400).json({ error: 'invalid item id' });
@@ -982,6 +1106,7 @@ app.put('/api/items/:itemId/vendor-options/:vendorId', (req, res) => {
         [itemId, vendorId],
         (readErr, row) => {
           if (readErr) return res.status(500).json({ error: readErr.message });
+          logActivity(req.user, 'update', 'item_vendor_option', `${itemId}:${vendorId}`, `${req.user.fullName} updated vendor pricing for item "${itemId}"`);
           res.json(row);
         }
       );
@@ -989,10 +1114,16 @@ app.put('/api/items/:itemId/vendor-options/:vendorId', (req, res) => {
   );
 });
 
+// Fields on items considered master/catalog data — admin only. muted/favorite are
+// personal workflow toggles any signed-in user can set.
+const ITEM_MASTER_FIELDS = ['reorderLevel', 'reorderQty', 'label', 'salePrice', 'primaryVendorId', 'altVendorId'];
+
 // Update item fields (partial)
-app.put('/api/items/:id', (req, res) => {
+app.put('/api/items/:id', requireAuth, (req, res) => {
   const id = req.params.id;
   const { reorderLevel, reorderQty, label, salePrice, primaryVendorId, altVendorId, muted, favorite } = req.body || {};
+  const touchesMasterField = ITEM_MASTER_FIELDS.some(f => typeof (req.body || {})[f] !== 'undefined');
+  if (touchesMasterField && !req.user.isAdmin) return res.status(403).json({ error: 'Admin access required' });
   // build dynamic set
   const sets = [];
   const params = [];
@@ -1011,13 +1142,14 @@ app.put('/api/items/:id', (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     db.get(`SELECT id,label,category,reorderLevel,reorderQty,unit,packSize,salePrice,primaryVendorId,altVendorId,muted,favorite FROM items WHERE id = ?`, [id], (err2, row) => {
       if (err2) return res.status(500).json({ error: err2.message });
+      if (touchesMasterField) logActivity(req.user, 'update', 'item', id, `${req.user.fullName} updated item "${row.label}"`);
       res.json(Object.assign({}, row, { muted: !!row.muted, favorite: !!row.favorite }));
     });
   });
 });
 
 // GET summary - compute current quantity per item
-app.get('/api/summary', (req, res) => {
+app.get('/api/summary', requireAuth, (req, res) => {
   db.all(`SELECT id FROM items`, (err, items) => {
     if (err) return res.status(500).json({ error: err.message });
 
@@ -1063,7 +1195,7 @@ app.get('/api/summary', (req, res) => {
 });
 
 // GET reorder status — last sent time and config presence
-app.get('/api/reorder/status', (req, res) => {
+app.get('/api/reorder/status', requireAuth, (req, res) => {
   const config = reorder.loadConfig();
   const state = reorder.loadState();
   res.json({
@@ -1076,17 +1208,27 @@ app.get('/api/reorder/status', (req, res) => {
 });
 
 // POST reorder/send — manually trigger report regardless of daily gate
-app.post('/api/reorder/send', async (req, res) => {
+app.post('/api/reorder/send', requireAuth, async (req, res) => {
   const config = reorder.loadConfig();
   if (!config || !config.smtp_user || !config.to) {
     return res.status(400).json({ error: 'Email not configured. Create server/email-config.json.' });
   }
   try {
     const result = await reorder.sendReorderEmail(db, config);
+    logActivity(req.user, 'create', 'reorder_report', null, `${req.user.fullName} triggered the reorder report`);
     res.json(result);
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// GET activity log — admin only
+app.get('/api/logs', requireAdmin, (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 2000);
+  db.all(`SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT ?`, [limit], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows || []);
+  });
 });
 
 // Catch-all: any unmatched /api/* route returns JSON (not HTML) so the client always gets parseable errors

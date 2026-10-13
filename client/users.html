@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>InvApp — Users</title>
+  <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-title" content="InvApp" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .user-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; margin-top:14px; }
+  </style>
+  <script>
+    try {
+      const t = localStorage.getItem('invapp.theme');
+      if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+    } catch(e) {}
+  </script>
+</head>
+<body>
+
+  <nav class="app-nav">
+    <a class="app-nav__brand" href="/"><span class="app-nav__dot"></span>InvApp</a>
+    <div class="app-nav__links">
+      <a href="/"            class="app-nav__link">Inventory</a>
+      <a href="/bars.html"   class="app-nav__link">Stock</a>
+      <a href="/history.html"class="app-nav__link">Details</a>
+      <a href="/orders.html" class="app-nav__link">Orders</a>
+      <a href="/vendors.html"class="app-nav__link">Vendors</a>
+      <a href="/users.html"  class="app-nav__link is-active">Users</a>
+      <a href="/logs.html"   class="app-nav__link" data-admin-only>Logs</a>
+    </div>
+    <div class="app-nav__actions">
+      <button id="themeToggle" class="btn-nav">Dark</button>
+    </div>
+  </nav>
+
+  <div class="page">
+    <div style="margin-bottom:14px">
+      <h1 style="margin:0;font-size:1.2rem;font-weight:800;letter-spacing:-.02em">Users</h1>
+      <p style="margin:2px 0 0;font-size:.84rem;color:var(--fg-muted)">Users and their aliases, used to credit who ordered or entered an order on the order sheet</p>
+    </div>
+
+    <section class="panel" style="padding:14px" data-admin-only>
+      <p class="section-title" style="margin-bottom:12px">Add User</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+        <div class="field"><label for="newEmail">Email</label><input id="newEmail" type="email" /></div>
+        <div class="field"><label for="newFullName">Full Name</label><input id="newFullName" /></div>
+        <div class="field"><label for="newAlias">Alias (2-3 chars)</label><input id="newAlias" maxlength="3" style="text-transform:uppercase" /></div>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:6px">
+        <input id="newIsAdmin" type="checkbox" style="width:auto" />
+        <label for="newIsAdmin" style="margin:0">Admin</label>
+      </div>
+      <div style="margin-top:12px">
+        <button id="addUserBtn" class="btn btnPrimary">Add User</button>
+      </div>
+    </section>
+
+    <div id="userList" class="user-grid"></div>
+  </div>
+
+  <script src="/auth.js"></script>
+  <script src="/users.js"></script>
+</body>
+</html>

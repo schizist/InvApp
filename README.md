@@ -15,11 +15,13 @@ Start-ScheduledTask -TaskName "INVAPP Server"
 
 You can also do this from the Task Scheduler GUI: open `taskschd.msc`, find **INVAPP Server** at the root of the task library, right-click → End, then right-click → Run.
 
+Gotcha: "Stop-ScheduledTask" / GUI "End" only kills the top-level process Task Scheduler tracks (the batch file). `npm start` launches `node.exe` as a grandchild, which isn't in that tracked tree, so it can survive the stop and keep holding port 3000. If `Start-ScheduledTask` afterward doesn't seem to take effect (or fails because the port's still in use), fall back to the manual method below to actually kill the orphaned `node.exe` first.
+
 **Manual fallback** — kill whatever is holding port 3000, then relaunch:
 
 ```powershell
 # find and stop the process listening on port 3000
-Get-NetTCPConnection -LocalPort 3000 -State Listen | Select-Object -ExpandProperty OwningProcess | Stop-Process -Force
+Get-NetTCPConnection -LocalPort 3000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 
 # relaunch the same way the scheduled task does
 & "C:\InvApp\start-invapp-server.bat"

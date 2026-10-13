@@ -79,6 +79,8 @@
 
   async function render(){
     listEl.innerHTML = '';
+    const authUser = window.InvAppAuth ? await window.InvAppAuth.ready : null;
+    const isAdmin = !!(authUser && authUser.isAdmin);
     let vendors = [];
     try{
       vendors = await fetchVendors();
@@ -98,10 +100,12 @@
         <div class="row">
           <h3>${escapeHtml(v.company)}</h3>
           <div class="actions">
+            ${isAdmin ? `
             <button class="btn btnNeutral editBtn">Edit</button>
             <button class="btn btnNeutral cancelBtn" style="display:none">Cancel</button>
             <button class="btn btnPrimary saveBtn" style="display:none">Save</button>
             <button class="btn btnDanger deleteBtn">Delete</button>
+            ` : ''}
           </div>
         </div>
         <div class="viewMode">
@@ -162,6 +166,8 @@
       }
 
       if (copyEmailsBtn) copyEmailsBtn.addEventListener('click', () => copyEmails(v.contactEmail, copyEmailsBtn));
+
+      if (!isAdmin) { listEl.appendChild(card); return; }
 
       editBtn.addEventListener('click', () => setEditing(true));
       cancelBtn.addEventListener('click', () => {

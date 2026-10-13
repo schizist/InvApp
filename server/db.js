@@ -169,6 +169,45 @@ function initializeSchema(dbConn){
     ]);
 
     dbConn.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        alias TEXT NOT NULL UNIQUE,
+        fullName TEXT NOT NULL,
+        isAdmin INTEGER NOT NULL DEFAULT 0,
+        updatedAt TEXT NOT NULL
+      )
+    `);
+
+    ensureColumns(dbConn, 'users', [
+      `ALTER TABLE users ADD COLUMN isAdmin INTEGER NOT NULL DEFAULT 0`
+    ]);
+
+    dbConn.run(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        userId INTEGER NOT NULL,
+        createdAt TEXT NOT NULL,
+        expiresAt TEXT NOT NULL
+      )
+    `);
+
+    dbConn.run(`
+      CREATE TABLE IF NOT EXISTS activity_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        userId INTEGER,
+        userEmail TEXT,
+        userAlias TEXT,
+        action TEXT NOT NULL,
+        entityType TEXT NOT NULL,
+        entityId TEXT,
+        summary TEXT NOT NULL,
+        details TEXT
+      )
+    `);
+
+    dbConn.run(`
       CREATE TABLE IF NOT EXISTS item_vendor_options (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         itemId TEXT NOT NULL,
@@ -349,6 +388,13 @@ function initializeSchema(dbConn){
     `);
     baseVendors.forEach(v => vendorSeedStmt.run(v.company, v.contactName, v.contactEmail, v.contactPhone, now));
     vendorSeedStmt.finalize();
+
+    dbConn.run(`
+      INSERT OR IGNORE INTO users (email, alias, fullName, isAdmin, updatedAt)
+      VALUES (?, ?, ?, 1, ?)
+    `, ['daniel@peakcorrosion.com', 'DC', 'Daniel Corron', now]);
+    // Ensure the original admin stays admin even if this row pre-dates the isAdmin column.
+    dbConn.run(`UPDATE users SET isAdmin = 1 WHERE lower(email) = 'daniel@peakcorrosion.com'`);
 
     dbConn.run(`
       INSERT OR IGNORE INTO vendors (company, contactName, contactEmail, contactPhone, updatedAt)
