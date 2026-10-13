@@ -186,80 +186,136 @@ function escapeHtml(value){
     .replace(/'/g, '&#39;');
 }
 
+const COMPANY_NAME = 'PEAK CORROSION CONTROL, INC.';
+const COMPANY_PHONE = '(520) 722-7484';
+const COMPANY_FAX = '(520) 722-0293';
+const COMPANY_ADDRESS_LINE1 = '887 S Warren Ave.';
+const COMPANY_ADDRESS_LINE2 = 'Tucson, AZ 85711';
+const COMPANY_EMAIL = 'daniel@peakcorrosion.com';
+
+function formatMoney(value){
+  const n = Number(value);
+  return Number.isFinite(n) ? `$${n.toFixed(2)}` : '';
+}
+
+// For any line missing a unitCost, look up the most recent unitCost previously
+// used for that same item (across other orders) so the sheet can show a
+// reasonable default without forcing the user to re-enter it.
+function fillLastUnitCosts(order, cb){
+  const lines = order.lines || [];
+  const needsLookup = lines.filter(line => (line.unitCost === null || typeof line.unitCost === 'undefined') && line.itemId);
+  if (!needsLookup.length) return cb(null, order);
+  let pending = needsLookup.length;
+  let failure = null;
+  needsLookup.forEach(line => {
+    db.get(`
+      SELECT ol.unitCost
+      FROM order_lines ol
+      JOIN orders o ON o.id = ol.orderId
+      WHERE ol.itemId = ? AND ol.unitCost IS NOT NULL AND ol.orderId != ?
+      ORDER BY o.orderDate DESC, o.updatedAt DESC
+      LIMIT 1
+    `, [line.itemId, order.id], (err, row) => {
+      if (err) failure = failure || err;
+      else if (row) line.lastUnitCost = row.unitCost;
+      if (--pending === 0) cb(failure, order);
+    });
+  });
+}
+
 function renderOrderSheet(order){
-  const noteRows = [];
+  let total = 0;
+  let totalKnown = false;
   const rows = (order.lines || []).map(line => {
-    const receipts = (line.receipts || []).slice(0, 3);
-    const extra = (line.receipts || []).slice(3);
-    if (line.notes) noteRows.push(`<p><strong>${escapeHtml(line.description)}:</strong> ${escapeHtml(line.notes)}</p>`);
-    if (extra.length) {
-      noteRows.push(`<p><strong>${escapeHtml(line.description)} additional receipts:</strong> ${extra.map(r => `${escapeHtml(r.quantityReceived)} on ${escapeHtml(r.receivedDate)}`).join(', ')}</p>`);
-    }
-    const cells = [0,1,2].map(i => {
-      const receipt = receipts[i];
-      return `<td>${receipt ? escapeHtml(receipt.quantityReceived) : ''}</td><td>${receipt ? escapeHtml(receipt.receivedDate) : ''}</td>`;
-    }).join('');
+    const unitCost = line.unitCost !== null && typeof line.unitCost !== 'undefined' ? Number(line.unitCost) : (line.lastUnitCost !== null && typeof line.lastUnitCost !== 'undefined' ? Number(line.lastUnitCost) : null);
+    const qty = Number(line.quantityOrdered) || 0;
+    const lineTotal = unitCost !== null ? qty * unitCost : null;
+    if (lineTotal !== null) { total += lineTotal; totalKnown = true; }
     return `
       <tr>
-        <td>${escapeHtml(line.quantityOrdered)}</td>
-        <td>${escapeHtml(line.description)}</td>
-        ${cells}
-        <td>${escapeHtml(line.remainder)}</td>
-        <td>${escapeHtml(String(line.status || '').replace('_', ' '))}</td>
+        <td class="qty">${escapeHtml(line.quantityOrdered)}</td>
+        <td class="desc">${escapeHtml(line.description)}</td>
+        <td class="money">${unitCost !== null ? formatMoney(unitCost) : ''}</td>
+        <td class="money">${lineTotal !== null ? formatMoney(lineTotal) : ''}</td>
       </tr>
     `;
   }).join('');
-  if (order.notes) noteRows.unshift(`<p><strong>Order notes:</strong> ${escapeHtml(order.notes)}</p>`);
+  const shipAttn = order.orderedBy || order.enteredBy || 'Daniel Corron';
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Order Sheet ${escapeHtml(order.poNumber)}</title>
+  <title>PO ${escapeHtml(order.poNumber)}</title>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;margin:28px;color:#111}
-    .top{display:grid;grid-template-columns:120px 1fr;gap:18px;align-items:start}
-    .logo{height:84px;border:1px solid #ddd;display:flex;align-items:center;justify-content:center}
-    .logo img{max-width:72px;max-height:72px}
-    h1{text-align:center;margin:0 0 18px 0;letter-spacing:1px}
-    .header{display:grid;grid-template-columns:170px 1fr 150px 1fr;gap:8px 10px;margin-bottom:18px}
-    .label{font-weight:bold}
-    table{width:100%;border-collapse:collapse}
+    body{font-family:Arial,Helvetica,sans-serif;margin:28px;color:#111;font-size:13px}
+    .letterhead{display:grid;grid-template-columns:220px 1fr;gap:20px;align-items:center;border-bottom:2px solid #111;padding-bottom:12px;margin-bottom:16px}
+    .letterhead img{width:220px;height:auto}
+    .companyName{font-size:18px;font-weight:bold;letter-spacing:.5px}
+    .companyDetails{font-size:12px;color:#333;margin-top:2px}
+    h1{text-align:center;margin:0 0 18px 0;letter-spacing:1px;font-size:16px}
+    .infoGrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-bottom:14px}
+    .infoGrid .label{font-weight:bold;display:inline-block;min-width:70px}
+    .re{margin-bottom:10px}
+    .re .label{font-weight:bold;display:inline-block;min-width:70px}
+    .message{margin-bottom:14px;min-height:20px}
+    .intro{margin-bottom:12px}
+    table{width:100%;border-collapse:collapse;margin-bottom:4px}
     th,td{border:1px solid #111;padding:7px;vertical-align:top}
-    th{font-size:12px;background:#f1f1f1}
-    .notes{margin-top:18px}
+    th{font-size:12px;background:#f1f1f1;text-align:left}
+    td.qty{width:70px;text-align:center}
+    td.money, th.money{width:110px;text-align:right}
+    .totalRow td{font-weight:bold;text-align:right}
+    .totalRow td.totalLabel{text-align:right}
+    .shipTo{margin-top:18px}
+    .shipTo .label{font-weight:bold}
     @media print{body{margin:12mm}.noPrint{display:none}}
   </style>
 </head>
 <body>
   <button class="noPrint" onclick="window.print()">Print</button>
-  <div class="top">
-    <div class="logo"><img src="/favicon-32x32.png" onerror="this.style.display='none'" alt=""></div>
+  <div class="letterhead">
+    <img src="/PeakLogo.svg" onerror="this.style.display='none'" alt="" />
     <div>
-      <h1>ORDER STATUS</h1>
-      <div class="header">
-        <div class="label">CONTRACTOR / CLIENT:</div><div>${escapeHtml(order.clientName)}</div>
-        <div class="label">STATUS:</div><div>${escapeHtml(order.status)}</div>
-        <div class="label">PO / JOB:</div><div>${escapeHtml(order.poNumber)}${order.jobName ? ' / ' + escapeHtml(order.jobName) : ''}</div>
-        <div class="label">ORDER DATE:</div><div>${escapeHtml(order.orderDate)}</div>
-        <div class="label">ORDERED FROM:</div><div>${escapeHtml(order.vendorName)}</div>
-        <div class="label">ORDERED BY:</div><div>${escapeHtml(order.orderedBy)}</div>
-        <div class="label">ENTERED BY:</div><div>${escapeHtml(order.enteredBy)}</div>
-      </div>
+      <div class="companyName">${escapeHtml(COMPANY_NAME)}</div>
+      <div class="companyDetails">${escapeHtml(COMPANY_PHONE)} &nbsp;|&nbsp; FAX ${escapeHtml(COMPANY_FAX)}</div>
+      <div class="companyDetails">${escapeHtml(COMPANY_ADDRESS_LINE1)}, ${escapeHtml(COMPANY_ADDRESS_LINE2)} &nbsp;|&nbsp; ${escapeHtml(COMPANY_EMAIL)}</div>
     </div>
   </div>
+  <h1>LETTER OF TRANSMITTAL / FACSIMILE</h1>
+  <div class="infoGrid">
+    <div><span class="label">ATTN:</span> ${escapeHtml(order.vendorName)}</div>
+    <div><span class="label">FROM:</span> ${escapeHtml(order.orderedBy || order.enteredBy || 'Daniel Corron')}</div>
+    <div><span class="label">EMAIL:</span> ${escapeHtml(order.vendorEmail || '-')}</div>
+    <div><span class="label">PHONE:</span> ${escapeHtml(COMPANY_PHONE)}</div>
+    <div><span class="label">PHONE:</span> ${escapeHtml(order.vendorPhone || '-')}</div>
+    <div><span class="label">DATE:</span> ${escapeHtml(order.orderDate)}</div>
+  </div>
+  <div class="re"><span class="label">RE:</span> ${escapeHtml(order.poNumber)}</div>
+  ${order.notes ? `<div class="message"><span class="label" style="font-weight:bold">Message:</span> ${escapeHtml(order.notes)}</div>` : ''}
+  <div class="intro">Please order the following materials to be shipped to our office.</div>
   <table>
     <thead>
       <tr>
-        <th>NO. ORDERED</th><th>DESCRIPTION</th>
-        <th>NO. ARRIVED</th><th>DATE</th>
-        <th>NO. ARRIVED</th><th>DATE</th>
-        <th>NO. ARRIVED</th><th>DATE</th>
-        <th>REMAINDER</th><th>STATUS</th>
+        <th class="qty">QUANT</th><th>DESCRIPTION</th><th class="money">UNIT COST</th><th class="money">TOTAL</th>
       </tr>
     </thead>
-    <tbody>${rows || '<tr><td colspan="10">No line items</td></tr>'}</tbody>
+    <tbody>${rows || '<tr><td colspan="4">No line items</td></tr>'}</tbody>
+    <tfoot>
+      <tr class="totalRow">
+        <td colspan="3" class="totalLabel">TOTAL</td>
+        <td class="money">${totalKnown ? formatMoney(total) : ''}</td>
+      </tr>
+    </tfoot>
   </table>
-  ${noteRows.length ? `<div class="notes"><h2>Notes</h2>${noteRows.join('')}</div>` : ''}
+  <div class="shipTo">
+    <div><span class="label">TAG:</span> ${escapeHtml(order.poNumber)}</div>
+    <div><span class="label">SHIP TO:</span> ${escapeHtml(shipAttn)} ${escapeHtml(COMPANY_PHONE)}</div>
+    <div>${escapeHtml(COMPANY_NAME)}</div>
+    <div>${escapeHtml(COMPANY_ADDRESS_LINE1)}</div>
+    <div>${escapeHtml(COMPANY_ADDRESS_LINE2)}</div>
+    <div style="margin-top:8px"><span class="label">SHIP:</span> As soon as possible regular ground shipping.</div>
+    <div style="margin-top:14px">Thank you!</div>
+  </div>
 </body>
 </html>`;
 }
@@ -597,7 +653,10 @@ app.get('/api/orders/:id/sheet', (req, res) => {
   readOrder(req.params.id, (err, order) => {
     if (err) return res.status(500).send(err.message);
     if (!order) return res.status(404).send('not found');
-    res.type('html').send(renderOrderSheet(order));
+    fillLastUnitCosts(order, (fillErr, filled) => {
+      if (fillErr) return res.status(500).send(fillErr.message);
+      res.type('html').send(renderOrderSheet(filled));
+    });
   });
 });
 
