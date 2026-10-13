@@ -19,6 +19,58 @@
       .replace(/'/g, '&#39;');
   }
 
+  function normalizeEmails(raw){
+    const seen = new Set();
+    const out = [];
+    String(raw || '').split(/[,;\n]+/).forEach(part => {
+      const email = part.trim();
+      if (!email || seen.has(email.toLowerCase())) return;
+      seen.add(email.toLowerCase());
+      out.push(email);
+    });
+    return out.join(', ');
+  }
+
+  function legacyCopy(text){
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-1000px';
+    textarea.style.left = '-1000px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    let ok = false;
+    try{ ok = document.execCommand('copy'); }catch(err){ ok = false; }
+    document.body.removeChild(textarea);
+    return ok;
+  }
+
+  async function copyEmails(emails, btn){
+    if (!emails) return;
+    let ok = false;
+    try{
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(emails);
+        ok = true;
+      } else {
+        ok = legacyCopy(emails);
+      }
+    }catch(err){
+      ok = legacyCopy(emails);
+    }
+    if (!ok){
+      alert('Failed to copy emails automatically. Copy manually:\n\n' + emails);
+      return;
+    }
+    if (btn){
+      const original = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    }
+  }
+
   async function fetchVendors(){
     const res = await fetch('/api/vendors');
     if (!res.ok) throw new Error('vendors fetch failed ' + res.status);
@@ -54,7 +106,10 @@
         </div>
         <div class="viewMode">
           <div class="muted">Contact: ${escapeHtml(v.contactName || '-')}</div>
-          <div class="muted">Email: ${escapeHtml(v.contactEmail || '-')}</div>
+          <div class="muted" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>Email: ${escapeHtml(v.contactEmail || '-')}</span>
+            ${v.contactEmail ? '<button class="btn btnNeutral copyEmailsBtn" style="padding:2px 8px;font-size:.78rem">Copy emails</button>' : ''}
+          </div>
           <div class="muted">Phone: ${escapeHtml(v.contactPhone || '-')}</div>
           <div class="muted">On-Time Score: ${v.onTimeScore == null ? '-' : `${escapeHtml(v.onTimeScore)}%`}</div>
         </div>
@@ -69,8 +124,8 @@
               <input class="contactInput" value="${escapeHtml(v.contactName || '')}" />
             </div>
             <div class="field">
-              <label>Email</label>
-              <input class="emailInput" value="${escapeHtml(v.contactEmail || '')}" />
+              <label>Email(s)</label>
+              <input class="emailInput" placeholder="comma-separated if multiple" value="${escapeHtml(v.contactEmail || '')}" />
             </div>
             <div class="field">
               <label>Phone</label>
@@ -88,6 +143,7 @@
       const cancelBtn = card.querySelector('.cancelBtn');
       const saveBtn = card.querySelector('.saveBtn');
       const deleteBtn = card.querySelector('.deleteBtn');
+      const copyEmailsBtn = card.querySelector('.copyEmailsBtn');
       const viewMode = card.querySelector('.viewMode');
       const editMode = card.querySelector('.editMode');
       const companyInput = card.querySelector('.companyInput');
@@ -104,6 +160,8 @@
         saveBtn.style.display = isEditing ? '' : 'none';
         deleteBtn.style.display = isEditing ? 'none' : '';
       }
+
+      if (copyEmailsBtn) copyEmailsBtn.addEventListener('click', () => copyEmails(v.contactEmail, copyEmailsBtn));
 
       editBtn.addEventListener('click', () => setEditing(true));
       cancelBtn.addEventListener('click', () => {
@@ -122,7 +180,7 @@
           return;
         }
         const contactName = (contactInput.value || '').trim();
-        const contactEmail = (emailInput.value || '').trim();
+        const contactEmail = normalizeEmails(emailInput.value);
         const contactPhone = (phoneInput.value || '').trim();
         const onTimeScoreRaw = (scoreInput.value || '').trim();
         const res = await fetch('/api/vendors/' + encodeURIComponent(v.id), {
@@ -162,7 +220,7 @@
   async function addVendor(){
     const company = (el('newCompany').value || '').trim();
     const contactName = (el('newContactName').value || '').trim();
-    const contactEmail = (el('newContactEmail').value || '').trim();
+    const contactEmail = normalizeEmails(el('newContactEmail').value);
     const contactPhone = (el('newContactPhone').value || '').trim();
     const onTimeScore = (el('newOnTimeScore').value || '').trim();
     if (!company){
