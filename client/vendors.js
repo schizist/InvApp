@@ -115,6 +115,7 @@
             ${v.contactEmail ? '<button class="btn btnNeutral copyEmailsBtn" style="padding:2px 8px;font-size:.78rem">Copy emails</button>' : ''}
           </div>
           <div class="muted">Phone: ${escapeHtml(v.contactPhone || '-')}</div>
+          <div class="muted">Account #: ${escapeHtml(v.accountNumber || '-')}</div>
           <div class="muted">On-Time Score: ${v.onTimeScore == null ? '-' : `${escapeHtml(v.onTimeScore)}%`}</div>
         </div>
         <div class="editMode" style="display:none">
@@ -136,6 +137,10 @@
               <input class="phoneInput" value="${escapeHtml(v.contactPhone || '')}" />
             </div>
             <div class="field">
+              <label>Account #</label>
+              <input class="accountInput" value="${escapeHtml(v.accountNumber || '')}" />
+            </div>
+            <div class="field">
               <label>On-Time Score (%)</label>
               <input class="scoreInput" type="number" step="0.01" value="${escapeHtml(v.onTimeScore ?? '')}" />
             </div>
@@ -154,6 +159,7 @@
       const contactInput = card.querySelector('.contactInput');
       const emailInput = card.querySelector('.emailInput');
       const phoneInput = card.querySelector('.phoneInput');
+      const accountInput = card.querySelector('.accountInput');
       const scoreInput = card.querySelector('.scoreInput');
 
       function setEditing(isEditing){
@@ -175,6 +181,7 @@
         contactInput.value = v.contactName || '';
         emailInput.value = v.contactEmail || '';
         phoneInput.value = v.contactPhone || '';
+        accountInput.value = v.accountNumber || '';
         scoreInput.value = v.onTimeScore == null ? '' : String(v.onTimeScore);
         setEditing(false);
       });
@@ -188,6 +195,7 @@
         const contactName = (contactInput.value || '').trim();
         const contactEmail = normalizeEmails(emailInput.value);
         const contactPhone = (phoneInput.value || '').trim();
+        const accountNumber = (accountInput.value || '').trim();
         const onTimeScoreRaw = (scoreInput.value || '').trim();
         const res = await fetch('/api/vendors/' + encodeURIComponent(v.id), {
           method: 'PUT',
@@ -197,6 +205,7 @@
             contactName: contactName || null,
             contactEmail: contactEmail || null,
             contactPhone: contactPhone || null,
+            accountNumber: accountNumber || null,
             onTimeScore: onTimeScoreRaw === '' ? null : Number(onTimeScoreRaw)
           })
         });
@@ -228,6 +237,7 @@
     const contactName = (el('newContactName').value || '').trim();
     const contactEmail = normalizeEmails(el('newContactEmail').value);
     const contactPhone = (el('newContactPhone').value || '').trim();
+    const accountNumber = (el('newAccountNumber').value || '').trim();
     const onTimeScore = (el('newOnTimeScore').value || '').trim();
     if (!company){
       alert('Company is required.');
@@ -241,6 +251,7 @@
         contactName: contactName || null,
         contactEmail: contactEmail || null,
         contactPhone: contactPhone || null,
+        accountNumber: accountNumber || null,
         onTimeScore: onTimeScore === '' ? null : Number(onTimeScore)
       })
     });
@@ -253,6 +264,7 @@
     el('newContactName').value = '';
     el('newContactEmail').value = '';
     el('newContactPhone').value = '';
+    el('newAccountNumber').value = '';
     el('newOnTimeScore').value = '';
     await render();
   }

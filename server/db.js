@@ -158,6 +158,7 @@ function initializeSchema(dbConn){
         contactName TEXT,
         contactEmail TEXT,
         contactPhone TEXT,
+        accountNumber TEXT,
         onTimeScore REAL,
         updatedAt TEXT NOT NULL
       )
@@ -165,7 +166,8 @@ function initializeSchema(dbConn){
 
     ensureColumns(dbConn, 'vendors', [
       `ALTER TABLE vendors ADD COLUMN contactPhone TEXT`,
-      `ALTER TABLE vendors ADD COLUMN onTimeScore REAL`
+      `ALTER TABLE vendors ADD COLUMN onTimeScore REAL`,
+      `ALTER TABLE vendors ADD COLUMN accountNumber TEXT`
     ]);
 
     dbConn.run(`
@@ -235,6 +237,7 @@ function initializeSchema(dbConn){
         vendorContactName TEXT,
         vendorEmail TEXT,
         vendorPhone TEXT,
+        vendorAccountNumber TEXT,
         orderedBy TEXT,
         enteredBy TEXT,
         status TEXT NOT NULL DEFAULT 'draft',
@@ -278,7 +281,8 @@ function initializeSchema(dbConn){
     ensureColumns(dbConn, 'orders', [
       `ALTER TABLE orders ADD COLUMN vendorContactName TEXT`,
       `ALTER TABLE orders ADD COLUMN vendorEmail TEXT`,
-      `ALTER TABLE orders ADD COLUMN vendorPhone TEXT`
+      `ALTER TABLE orders ADD COLUMN vendorPhone TEXT`,
+      `ALTER TABLE orders ADD COLUMN vendorAccountNumber TEXT`
     ]);
 
     ensureColumns(dbConn, 'order_lines', [

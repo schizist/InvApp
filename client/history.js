@@ -167,9 +167,11 @@
     const contact = el('vendorContact');
     const emails = el('vendorEmails');
     const phone = el('vendorPhone');
+    const account = el('vendorAccountNumber');
     if (contact) contact.value = v && v.contactName ? v.contactName : '';
     if (emails) emails.value = v && v.contactEmail ? v.contactEmail : '';
     if (phone) phone.value = v && v.contactPhone ? v.contactPhone : '';
+    if (account) account.value = v && v.accountNumber ? v.accountNumber : '';
   }
 
   function renderOrderVendors(item){
@@ -239,6 +241,7 @@
             <dt>Contact</dt><dd>${escapeHtml((vendor && vendor.contactName) || '-')}</dd>
             <dt>Email</dt><dd>${vendor && vendor.contactEmail ? `<a href="mailto:${escapeHtml(vendor.contactEmail)}">${escapeHtml(vendor.contactEmail)}</a>` : '-'}</dd>
             <dt>Phone</dt><dd>${escapeHtml((vendor && vendor.contactPhone) || '-')}</dd>
+            <dt>Account #</dt><dd>${escapeHtml((vendor && vendor.accountNumber) || '-')}</dd>
             <dt>On-Time</dt><dd>${vendor && vendor.onTimeScore != null ? `${escapeHtml(vendor.onTimeScore)}%` : '-'}</dd>
             <dt>Part Number</dt><dd>${escapeHtml(option.partNumber || '-')}</dd>
             <dt>Price</dt><dd>${currency(option.price)}</dd>

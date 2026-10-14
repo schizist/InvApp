@@ -57,6 +57,7 @@ function normalizeOrderPayload(body, existing){
     vendorContactName: (body.vendorContactName || '').trim() || null,
     vendorEmail: (body.vendorEmail || '').trim() || null,
     vendorPhone: (body.vendorPhone || '').trim() || null,
+    vendorAccountNumber: (body.vendorAccountNumber || '').trim() || null,
     orderedBy: (body.orderedBy || '').trim() || null,
     enteredBy: (body.enteredBy || '').trim() || null,
     status: ORDER_STATUSES.has(body.status) ? body.status : ((existing && existing.status) || 'draft'),
@@ -310,6 +311,7 @@ function renderOrderSheet(order, usersByAlias){
   <div class="infoGrid">
     <div><span class="label">ATTN:</span> ${escapeHtml(order.vendorName)}</div>
     <div><span class="label">FROM:</span> ${escapeHtml(fromName)}</div>
+    <div><span class="label">ACCOUNT #:</span> ${escapeHtml(order.vendorAccountNumber || '-')}</div>
     <div><span class="label">EMAIL:</span> ${escapeHtml(order.vendorEmail || '-')}</div>
     <div><span class="label">PHONE:</span> ${escapeHtml(COMPANY_PHONE)}</div>
     <div><span class="label">PHONE:</span> ${escapeHtml(order.vendorPhone || '-')}</div>
@@ -429,8 +431,8 @@ app.post('/api/orders', requireAuth, (req, res) => {
     db.run(`
       INSERT INTO orders (
         id, poNumber, generatedPoNumber, clientName, jobName, orderDate, vendorName,
-        vendorContactName, vendorEmail, vendorPhone, orderedBy, enteredBy, status, notes, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        vendorContactName, vendorEmail, vendorPhone, vendorAccountNumber, orderedBy, enteredBy, status, notes, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         poNumber = excluded.poNumber,
         generatedPoNumber = excluded.generatedPoNumber,
@@ -441,6 +443,7 @@ app.post('/api/orders', requireAuth, (req, res) => {
         vendorContactName = excluded.vendorContactName,
         vendorEmail = excluded.vendorEmail,
         vendorPhone = excluded.vendorPhone,
+        vendorAccountNumber = excluded.vendorAccountNumber,
         orderedBy = excluded.orderedBy,
         enteredBy = excluded.enteredBy,
         status = excluded.status,
@@ -448,7 +451,7 @@ app.post('/api/orders', requireAuth, (req, res) => {
         updatedAt = excluded.updatedAt
     `, [
       order.id, order.poNumber, order.generatedPoNumber, order.clientName, order.jobName, order.orderDate, order.vendorName,
-      order.vendorContactName, order.vendorEmail, order.vendorPhone, order.orderedBy, order.enteredBy, order.status, order.notes, order.createdAt, order.updatedAt
+      order.vendorContactName, order.vendorEmail, order.vendorPhone, order.vendorAccountNumber, order.orderedBy, order.enteredBy, order.status, order.notes, order.createdAt, order.updatedAt
     ], err => {
       if (err) return res.status(400).json({ error: err.message });
       readOrder(order.id, (readErr, saved) => {
@@ -476,12 +479,12 @@ app.put('/api/orders/:id', requireAuth, (req, res) => {
     db.run(`
       UPDATE orders SET
         poNumber = ?, generatedPoNumber = ?, clientName = ?, jobName = ?, orderDate = ?,
-        vendorName = ?, vendorContactName = ?, vendorEmail = ?, vendorPhone = ?,
+        vendorName = ?, vendorContactName = ?, vendorEmail = ?, vendorPhone = ?, vendorAccountNumber = ?,
         orderedBy = ?, enteredBy = ?, status = ?, notes = ?, updatedAt = ?
       WHERE id = ?
     `, [
       order.poNumber, order.generatedPoNumber, order.clientName, order.jobName, order.orderDate,
-      order.vendorName, order.vendorContactName, order.vendorEmail, order.vendorPhone,
+      order.vendorName, order.vendorContactName, order.vendorEmail, order.vendorPhone, order.vendorAccountNumber,
       order.orderedBy, order.enteredBy, order.status, order.notes, order.updatedAt, order.id
     ], err => {
       if (err) return res.status(400).json({ error: err.message });
@@ -843,7 +846,7 @@ app.get('/api/items/:id', requireAuth, (req, res) => {
     row.muted = !!row.muted;
     row.favorite = !!row.favorite;
     db.all(
-      `SELECT id,company,contactName,contactEmail,contactPhone,onTimeScore,updatedAt
+      `SELECT id,company,contactName,contactEmail,contactPhone,accountNumber,onTimeScore,updatedAt
        FROM vendors
        ORDER BY company ASC`,
       [],
@@ -885,7 +888,7 @@ app.get('/api/items/:id', requireAuth, (req, res) => {
 // Get all vendors
 app.get('/api/vendors', requireAuth, (req, res) => {
   db.all(
-    `SELECT id,company,contactName,contactEmail,contactPhone,onTimeScore,updatedAt FROM vendors ORDER BY company ASC`,
+    `SELECT id,company,contactName,contactEmail,contactPhone,accountNumber,onTimeScore,updatedAt FROM vendors ORDER BY company ASC`,
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json(rows || []);
@@ -900,12 +903,12 @@ app.post('/api/vendors', requireAdmin, (req, res) => {
   if (!company) return res.status(400).json({ error: 'company is required' });
   const now = new Date().toISOString();
   db.run(
-    `INSERT INTO vendors (company, contactName, contactEmail, contactPhone, onTimeScore, updatedAt) VALUES (?, ?, ?, ?, ?, ?)`,
-    [company, body.contactName || null, body.contactEmail || null, body.contactPhone || null, (body.onTimeScore === null || body.onTimeScore === '' || typeof body.onTimeScore === 'undefined') ? null : Number(body.onTimeScore), now],
+    `INSERT INTO vendors (company, contactName, contactEmail, contactPhone, accountNumber, onTimeScore, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [company, body.contactName || null, body.contactEmail || null, body.contactPhone || null, body.accountNumber || null, (body.onTimeScore === null || body.onTimeScore === '' || typeof body.onTimeScore === 'undefined') ? null : Number(body.onTimeScore), now],
     function(err){
       if (err) return res.status(500).json({ error: err.message });
       db.get(
-        `SELECT id,company,contactName,contactEmail,contactPhone,onTimeScore,updatedAt FROM vendors WHERE id = ?`,
+        `SELECT id,company,contactName,contactEmail,contactPhone,accountNumber,onTimeScore,updatedAt FROM vendors WHERE id = ?`,
         [this.lastID],
         (readErr, row) => {
           if (readErr) return res.status(500).json({ error: readErr.message });
@@ -921,7 +924,7 @@ app.post('/api/vendors', requireAdmin, (req, res) => {
 app.put('/api/vendors/:id', requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'invalid vendor id' });
-  const { company, contactName, contactEmail, contactPhone, onTimeScore } = req.body || {};
+  const { company, contactName, contactEmail, contactPhone, accountNumber, onTimeScore } = req.body || {};
 
   const sets = [];
   const params = [];
@@ -930,6 +933,7 @@ app.put('/api/vendors/:id', requireAdmin, (req, res) => {
   if (typeof contactName !== 'undefined') { sets.push('contactName = ?'); params.push(contactName); }
   if (typeof contactEmail !== 'undefined') { sets.push('contactEmail = ?'); params.push(contactEmail); }
   if (typeof contactPhone !== 'undefined') { sets.push('contactPhone = ?'); params.push(contactPhone); }
+  if (typeof accountNumber !== 'undefined') { sets.push('accountNumber = ?'); params.push(accountNumber); }
   if (typeof onTimeScore !== 'undefined') { sets.push('onTimeScore = ?'); params.push(onTimeScore === null || onTimeScore === '' ? null : Number(onTimeScore)); }
 
   if (sets.length === 0) return res.status(400).json({ error: 'no fields' });
@@ -942,7 +946,7 @@ app.put('/api/vendors/:id', requireAdmin, (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (!this.changes) return res.status(404).json({ error: 'not found' });
     db.get(
-      `SELECT id,company,contactName,contactEmail,contactPhone,onTimeScore,updatedAt FROM vendors WHERE id = ?`,
+      `SELECT id,company,contactName,contactEmail,contactPhone,accountNumber,onTimeScore,updatedAt FROM vendors WHERE id = ?`,
       [id],
       (readErr, row) => {
         if (readErr) return res.status(500).json({ error: readErr.message });

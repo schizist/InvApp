@@ -8,7 +8,7 @@
   const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random()*16|0; const v = c === 'x' ? r : (r&0x3|0x8); return v.toString(16);
   });
-  const fields = ['poNumber','clientName','jobName','orderDate','vendorName','vendorContactName','vendorEmail','vendorPhone','orderedBy','enteredBy','status','notes'];
+  const fields = ['poNumber','clientName','jobName','orderDate','vendorName','vendorContactName','vendorEmail','vendorPhone','vendorAccountNumber','orderedBy','enteredBy','status','notes'];
   let orders = [];
   let items = [];
   let vendors = [];
@@ -79,7 +79,7 @@
     const now = new Date().toISOString();
     return {
       id: uuid(), poNumber: '', generatedPoNumber: false, clientName: '', jobName: '',
-      orderDate: today(), vendorName: '', vendorContactName: '', vendorEmail: '', vendorPhone: '',
+      orderDate: today(), vendorName: '', vendorContactName: '', vendorEmail: '', vendorPhone: '', vendorAccountNumber: '',
       orderedBy: '', enteredBy: '', status: 'draft', notes: '', createdAt: now, updatedAt: now,
       lines: [], progress: { ordered: 0, received: 0 }
     };
@@ -118,10 +118,12 @@
     $('vendorContactName').value = vendor ? (vendor.contactName || '') : '';
     $('vendorEmail').value = vendor ? (vendor.contactEmail || '') : '';
     $('vendorPhone').value = vendor ? (vendor.contactPhone || '') : '';
+    $('vendorAccountNumber').value = vendor ? (vendor.accountNumber || '') : '';
     if (current) {
       current.vendorContactName = $('vendorContactName').value;
       current.vendorEmail = $('vendorEmail').value;
       current.vendorPhone = $('vendorPhone').value;
+      current.vendorAccountNumber = $('vendorAccountNumber').value;
     }
   }
 
@@ -501,6 +503,7 @@
       current.vendorContactName = vendor.contactName || '';
       current.vendorEmail = vendor.contactEmail || '';
       current.vendorPhone = vendor.contactPhone || '';
+      current.vendorAccountNumber = vendor.accountNumber || '';
     }
     current.status = statusOverride || current.status || 'draft';
     current.orderDate = current.orderDate || today();
