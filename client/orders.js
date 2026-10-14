@@ -344,6 +344,13 @@
       row.querySelectorAll('input').forEach(input => input.addEventListener('change', () => updateLineFromForm(idx)));
       if (detailsRow) detailsRow.querySelectorAll('input').forEach(input => input.addEventListener('change', () => updateLineFromForm(idx)));
 
+      // Picking a suggestion from the item datalist sets the field's value without
+      // blurring it, so `change` doesn't fire until the user clicks elsewhere. `input`
+      // fires immediately for a datalist pick (as well as typing), so the "Linked"
+      // indicator updates right away instead of needing an extra click to register.
+      const descInput = row.querySelector(`#lineDesc-${idx}`);
+      if (descInput) descInput.addEventListener('input', () => updateLineFromForm(idx));
+
       const expandBtn = row.querySelector('.expandBtn');
       if (expandBtn && detailsRow) {
         expandBtn.addEventListener('click', () => {
