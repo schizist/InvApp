@@ -434,6 +434,19 @@ h1, h2, h3 { line-height: 1.2; }
   transition: background .12s;
 }
 .controls .btnSet:hover { background: var(--surface-3); color: var(--fg); }
+.controls .btnConfirm {
+  width: 58px; height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--primary);
+  background: var(--surface-2);
+  color: var(--primary);
+  font-size: .64rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .12s, color .12s;
+}
+.controls .btnConfirm:hover { background: var(--primary); color: var(--primary-fg); }
 
 #queueSummary { margin-top: 10px; font-size: .84rem; color: var(--fg-muted); }
 #queued {

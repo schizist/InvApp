@@ -316,6 +316,8 @@ function renderOrderSheet(order, usersByAlias){
     <div><span class="label">PHONE:</span> ${escapeHtml(COMPANY_PHONE)}</div>
     <div><span class="label">PHONE:</span> ${escapeHtml(order.vendorPhone || '-')}</div>
     <div><span class="label">DATE:</span> ${escapeHtml(order.orderDate)}</div>
+    <div><span class="label">CLIENT:</span> ${escapeHtml(order.clientName || '-')}</div>
+    <div><span class="label">JOB:</span> ${escapeHtml(order.jobName || '-')}</div>
   </div>
   <div class="re"><span class="label">RE:</span> ${escapeHtml(order.poNumber)}</div>
   ${order.notes ? `<div class="message"><span class="label" style="font-weight:bold">Message:</span> ${escapeHtml(order.notes)}</div>` : ''}

@@ -27,6 +27,24 @@
   }
   function uuidv4(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{const r=Math.random()*16|0;const v=c=='x'?r:(r&0x3|0x8);return v.toString(16);}); }
 
+  function toast(message, duration){
+    let stack = document.querySelector('.toast-stack');
+    if (!stack){
+      stack = document.createElement('div');
+      stack.className = 'toast-stack';
+      document.body.appendChild(stack);
+    }
+    const node = document.createElement('div');
+    node.className = 'toast';
+    node.textContent = message;
+    stack.appendChild(node);
+    requestAnimationFrame(() => node.classList.add('toast-show'));
+    setTimeout(() => {
+      node.classList.remove('toast-show');
+      setTimeout(() => node.remove(), 200);
+    }, duration || 2200);
+  }
+
   function getUnitInfo(category){
     // returns {multiplier, label}
     switch((category||'').toLowerCase()){
@@ -305,6 +323,7 @@
     const btnPlus = node.querySelector('.btnPlus');
     const btnMinus = node.querySelector('.btnMinus');
     const btnSet = node.querySelector('.btnSet');
+    const btnConfirm = node.querySelector('.btnConfirm');
     const badge = node.querySelector('.reorderBadge');
     node.querySelector('.favStar').style.display = it.favorite ? 'inline' : 'none';
     if (typeof it.reorderLevel !== 'undefined' && it.reorderLevel !== null){
@@ -314,6 +333,7 @@
     btnPlus.setAttribute('aria-label', `Add one ${unit.label} to ${it.label}`);
     btnMinus.setAttribute('aria-label', `Subtract one ${unit.label} from ${it.label}`);
     btnSet.setAttribute('aria-label', `Set absolute count for ${it.label}`);
+    btnConfirm.setAttribute('aria-label', `Confirm current count of ${projectedBase} for ${it.label} is unchanged`);
     btnPlus.addEventListener('click', async ()=>{
       const unitInfo = getUnitInfo(it.category);
       const ev = { id: uuidv4(), itemId: it.id, type: 'DELTA', qty: unitInfo.multiplier, timestamp: new Date().toISOString(), source: 'mobile' };
@@ -331,6 +351,11 @@
       if (!Number.isInteger(n)) { alert('Enter a whole number.'); return; }
       const ev = { id: uuidv4(), itemId: it.id, type: 'COUNT', qty: n, timestamp: new Date().toISOString(), source: 'mobile', sessionId: currentSession };
       await queueEvent(ev);
+    });
+    btnConfirm.addEventListener('click', async ()=>{
+      const ev = { id: uuidv4(), itemId: it.id, type: 'COUNT', qty: projectedBase, timestamp: new Date().toISOString(), source: 'mobile', sessionId: currentSession, note: 'Confirmed, no change' };
+      await queueEvent(ev);
+      toast(`${it.label}: confirmed at ${projectedBase}.`);
     });
     return node;
   }
